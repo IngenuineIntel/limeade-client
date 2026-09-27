@@ -1,0 +1,9 @@
+{
+	"description": "Client for Limeade",
+	"license": "AGPL-3.0-or-later",
+	"authors": [
+		"ingenuineintel"
+	],
+	"copyright": "Copyright © 2026, ingenuineintel",
+	"name": "limeade-client"
+}
