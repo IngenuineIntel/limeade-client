@@ -33,8 +33,12 @@
 #define LCE_HOOK_SETREUID
 
 // warning: noisy
-//#define LCE_HOOK_GETPID_FAMILY // getpid, getppid, gettid
-#define LCE_HOOK_GETUID_FAMILY // getuid, geteuid, etc.
+//#define LCE_HOOK_GETUID_FAMILY // getuid, geteuid, getresuid
+//#define LCE_HOOK_GETGID_FAMILY // getgid, getegid, getpgid, getresgid
+//#define LCE_HOOK_GETPID_FAMILY // getpid, getppid
+#define LCE_HOOK_SETUID_FAMILY // setuid, seteuid, setresuid, setfsuid
+#define LCE_HOOK_SETGID_FAMILY // setgid, setegid, setpgid, setresgid, setfsgid
+
 
 #define LCE_HOOK_PTRACE
 #define LCE_HOOK_CAPGET
