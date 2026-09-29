@@ -18,27 +18,44 @@ enum lce_event_type
   LCE_EVENT_CLOSE,
   LCE_EVENT_UNLINK,
   LCE_EVENT_RENAME,
+
   LCE_EVENT_READ,
   LCE_EVENT_PREAD,
   LCE_EVENT_WRITE,
   LCE_EVENT_PWRITE,
+
+  LCE_EVENT_FORK,
+  LCE_EVENT_EXECVE,
+  LCE_EVENT_KILL,
+
   LCE_EVENT_SENDTO,
   LCE_EVENT_RECVFROM,
   LCE_EVENT_CONNECT,
   LCE_EVENT_ACCEPT,
-  LCE_EVENT_SETGID,
+
   LCE_EVENT_SETUID,
-  LCE_EVENT_SETREUID,
+  LCE_EVENT_SETFSUID,
   LCE_EVENT_SETRESUID,
-  LCE_EVENT_SETRESGUID,
+  LCE_EVENT_SETGID,
+  LCE_EVENT_SETEGID,
+  LCE_EVENT_SETGESGID,
+  
   LCE_EVENT_GETPID,
   LCE_EVENT_GETPPID,
+
   LCE_EVENT_GETUID,
+  LCE_EVENT_GETEUID,
+  LET_EVENT_GETRESUID,
   LCE_EVENT_GETGID,
-  LCE_EVENT_GETREUID,
+  LCE_EVENT_GETEGID,
+  LCE_EVENT_GETPGID,
+  LCE_EVENT_GETRESGID,
+
   LCE_EVENT_PTRACE,
+
   LCE_EVENT_CAPGET,
   LCE_EVENT_CAPSET,
+
   LCE_EVENT_KEYCTL
 };
 
@@ -100,6 +117,7 @@ GEN_HOOK(lce_hook_fork);
 
 #ifdef LCE_HOOK_EXECVE
 GEN_HOOK(lce_hook_execve);
+GEN_HOOK(lce_hook_execveat);
 #endif
 
 #ifdef LCE_HOOK_KILL
@@ -212,6 +230,15 @@ static struct kprobe lce_kprobes[] = {
   ENTRY(pwrite64, lce_hook_write),
 #endif
 
+#ifdef LCE_HOOK_FORK
+  ENTRY(fork, lce_hook_fork),
+#endif
+
+#ifdef LCE_HOOK_EXECVE
+  ENTRY(execve, lce_hook_execve),
+  ENTRY(execveat, lce_hook_execveat),
+#endif
+
 #ifdef LCE_HOOK_BIND
   ENTRY(bind, lce_hook_bind),
 #endif
@@ -273,6 +300,7 @@ static struct kprobe lce_kprobes[] = {
   ENTRY(setegid, lce_hook_setegid),
   ENTRY(setegid16, lce_hook_setegid),
   ENTRY(setfsgid, lce_hook_setfsgid),
+  ENTRY(setfsgid16, lce_hook_setfsgid),
   ENTRY(setresgid, lce_hook_setresgid),
   ENTRY(setresgid16, lce_hook_setresgid),
 #endif
@@ -304,48 +332,127 @@ static struct kprobe lce_kprobes[] = {
 }
 
 static struct kretprobe lce_kretprobes[] = {
+
 #ifdef LCE_HOOK_OPEN
   ENTRY(open),
   ENTRY(openat2),
 #endif
+
 #ifdef LCE_HOOK_CLOSE
   ENTRY(close),
 #endif
+
 #ifdef LCE_HOOK_UNLINK
   ENTRY(unlink),
 #endif
+
 #ifdef LCE_HOOK_RENAME
   ENTRY(rename),
 #endif
+
 #ifdef LCE_HOOK_READ
   ENTRY(read),
   ENTRY(pread64),
 #endif
+
 #ifdef LCE_HOOK_WRITE
   ENTRY(write),
   ENTRY(pwrite64),
 #endif
+
+#ifdef LCE_HOOK_FORK
+  ENTRY(fork),
+#endif
+
+#ifdef LCE_HOOK_EXECVE
+  ENTRY(execve),
+  ENTRY(execveat),
+#endif
+
+#ifdef LCE_HOOK_KILL
+  ENTRY(kill),
+#endif
+
 #ifdef LCE_HOOK_BIND
   ENTRY(bind),
 #endif
+
 #ifdef LCE_HOOK_SENDTO
   ENTRY(sendto),
 #endif
+
 #ifdef LCE_HOOK_RECVFROM
   ENTRY(recvfrom),
 #endif
+
 #ifdef LCE_HOOK_CONNECT
   ENTRY(connect),
 #endif
+
 #ifdef LCE_HOOK_ACCEPT
   ENTRY(accept),
 #endif
-#ifdef LCE_HOOK_SETGID
-  ENTRY(setgid),
-#endif
-#ifdef LCE_HOOK_SETUID
-  ENTRY(setuid),
-#endif
-#ifdef LCE_HOOK_SETE
-};
 
+#ifdef LCE_HOOK_GETUID_FAMILY
+  ENTRY(getuid),
+  ENTRY(getuid16),
+  ENTRY(geteuid),
+  ENTRY(geteuid16),
+  ENTRY(getresuid),
+  ENTRY(getresuid16),
+#endif
+
+#ifdef LCE_HOOK_GETGID_FAMILY
+  ENTRY(getgid),
+  ENTRY(getgid16),
+  ENTRY(getegid),
+  ENTRY(getegid16),
+  ENTRY(getpgid),
+  ENTRY(getresgid),
+  ENTRY(getresgid16),
+#endif
+
+#ifdef LCE_HOOK_GETPID_FAMILY
+  ENTRY(getpid),
+  ENTRY(getppid),
+#endif
+
+#ifdef LCE_HOOK_SETUID_FAMILY
+  ENTRY(setuid),
+  ENTRY(setuid16),
+  ENTRY(seteuid),
+  ENTRY(seteuid16),
+  ENTRY(setfsuid),
+  ENTRY(setfsuid16),
+  ENTRY(setresuid),
+  ENTRY(setresuid16),
+#endif
+
+#ifdef LCE_HOOK_SETGID_FAMILY
+  ENTRY(setgid),
+  ENTRY(setgid16),
+  ENTRY(setegid),
+  ENTRY(setegid16),
+  ENTRY(setfsgid),
+  ENTRY(setfsgid16),
+  ENTRY(setresgid),
+  ENTRY(setresgid16),
+#endif
+
+#ifdef LCE_HOOK_PTRACE
+  ENTRY(ptrace),
+#endif
+
+#ifdef LCE_HOOK_CAPGET
+  ENTRY(capget),
+#endif
+
+#ifdef LCE_HOOK_CAPSET
+  ENTRY(capset),
+#endif
+
+#ifdef LCE_HOOK_KEYCTL
+  ENTRY(keyctl),
+#endif
+
+};
