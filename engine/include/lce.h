@@ -1,20 +1,66 @@
 // lce.h
 
+// TODO hooks
+// renameat / renameat2
+// send/sendmsg
+
 #include<linux/atomic.h>
+#include<linux/hashtable.h>
 #include<linux/kfifo.h>
 #include<linux/kprobes.h>
 #include<linux/proc_fs.h>
-
-extern atomic_t hooks_ready;
-extern atomic_t hooks_collecting;
 
 #include"config.h"
 
 /*** KFIFO & EVENTS***/
 
+// size of FIFO buffer
+#define LCE_FIFO_SZ     8192
+// size of argument representation
+#define LCE_ARG_REPR_SZ 50
+
+struct lce_event
+{
+  u64 ts;
+  pid_t pid;
+  u16 type; // LCE_EVENT_*
+  char arg1[LCE_ARG_REPR_SZ];
+  char arg2[LCE_ARG_REPR_SZ];
+  int ret;
+};
+
+struct lce_event_pending
+{
+  struct lce_event ev;
+  struct hlist_node node;
+};
+
+#define LCE_HASH_BITS 8
+
+static DEFINE_KFIFO(lce_kfifo, struct lce_event, LCE_FIFO_SZ);
+static DEFINE_SPINLOCK(lce_kfifo_lock);
+
+static DEFINE_HASHTABLE(lce_hashtbl, LCE_HASH_BITS);
+static DEFINE_SPINLOCK(lce_hashtbl_lock);
+
+/*** PROCFILE ***/
+
+static int lce_proc_open(struct inode *inode, struct file *file);
+static ssize_t lce_proc_read(struct file *file, char __user *ubuf, size_t count, loff_t *ppos);
+
+/*** HOOKS ***/
+
+extern atomic_t hooks_ready;
+extern atomic_t hooks_collecting;
+
+#define LCE_HOOK_GUARD()\
+if(!atomic_read(&hooks_ready) || !atomic_read(&hooks_collecting))\
+  return 0;
+
 enum lce_event_type
 {
   LCE_EVENT_OPEN,
+  LCE_EVENT_OPENAT,
   LCE_EVENT_CLOSE,
   LCE_EVENT_UNLINK,
   LCE_EVENT_RENAME,
@@ -38,14 +84,14 @@ enum lce_event_type
   LCE_EVENT_SETRESUID,
   LCE_EVENT_SETGID,
   LCE_EVENT_SETEGID,
-  LCE_EVENT_SETGESGID,
+  LCE_EVENT_SETRESGID,
   
   LCE_EVENT_GETPID,
   LCE_EVENT_GETPPID,
 
   LCE_EVENT_GETUID,
   LCE_EVENT_GETEUID,
-  LET_EVENT_GETRESUID,
+  LCE_EVENT_GETRESUID,
   LCE_EVENT_GETGID,
   LCE_EVENT_GETEGID,
   LCE_EVENT_GETPGID,
@@ -53,42 +99,23 @@ enum lce_event_type
 
   LCE_EVENT_PTRACE,
 
+  /*
   LCE_EVENT_CAPGET,
   LCE_EVENT_CAPSET,
+  */
 
   LCE_EVENT_KEYCTL
 };
 
-// size of FIFO buffer
-#define LCE_FIFO_SZ     8192
-// size of argument representation
-#define LCE_ARG_REPR_SZ 128
-
-struct lce_event
-{
-  u32 ts_s;
-  u32 ts_ns;
-  pid_t pid;
-  u16 type; // LCE_EVENT_*
-  char arg1[LCE_ARG_REPR_SZ];
-  char arg2[LCE_ARG_REPR_SZ];
-  int ret;
-};
-
-static DECLARE_KFIFO(lce_kfifo, struct lce_event, LCE_FIFO_SZ);
-
-/*** PROCFILE ***/
-
-static int lce_proc_open(struct inode *inode, struct file *file);
-static int lce_proc_read(struct inode *inode, struct file *file);
-
-/*** HOOKS ***/
+// copies a string from userspace
+static int lce_user_strcpy(const char __user *s, char *dst, int sz);
 
 #define GEN_HOOK(name) int name(struct kprobe *p, struct pt_regs *regs)
 static int lce_hook_ret(struct kretprobe_instance *ri, struct pt_regs *regs);
 
 #ifdef LCE_HOOK_OPEN
 GEN_HOOK(lce_hook_open);
+GEN_HOOK(lce_hook_openat);
 #endif
 
 #ifdef LCE_HOOK_CLOSE
@@ -181,6 +208,8 @@ GEN_HOOK(lce_hook_setfsgid);
 GEN_HOOK(lce_hook_ptrace);
 #endif
 
+// not prioritized
+/*
 #ifdef LCE_HOOK_CAPGET
 GEN_HOOK(lce_hook_capget);
 #endif
@@ -188,6 +217,7 @@ GEN_HOOK(lce_hook_capget);
 #ifdef LCE_HOOK_CAPSET
 GEN_HOOK(lce_hook_capset);
 #endif
+*/
 
 #ifdef LCE_HOOK_KEYCTL
 GEN_HOOK(lce_hook_keyctl);
@@ -205,7 +235,7 @@ static struct kprobe lce_kprobes[] = {
 
 #ifdef LCE_HOOK_OPEN
   ENTRY(open, lce_hook_open),
-  ENTRY(openat2, lce_hook_open),
+  ENTRY(openat2, lce_hook_openat),
 #endif
 
 #ifdef LCE_HOOK_CLOSE
@@ -309,6 +339,7 @@ static struct kprobe lce_kprobes[] = {
   ENTRY(ptrace, lce_hook_ptrace),
 #endif
 
+/*
 #ifdef LCE_HOOK_CAPGET
   ENTRY(capget, lce_hook_capget),
 #endif
@@ -316,6 +347,7 @@ static struct kprobe lce_kprobes[] = {
 #ifdef LCE_HOOK_CAPSET
   ENTRY(capset, lce_hook_capset),
 #endif
+*/
 
 #ifdef LCE_HOOK_KEYCTL
     ENTRY(keyctl, lce_hook_keyctl),
@@ -443,6 +475,7 @@ static struct kretprobe lce_kretprobes[] = {
   ENTRY(ptrace),
 #endif
 
+/*
 #ifdef LCE_HOOK_CAPGET
   ENTRY(capget),
 #endif
@@ -450,9 +483,12 @@ static struct kretprobe lce_kretprobes[] = {
 #ifdef LCE_HOOK_CAPSET
   ENTRY(capset),
 #endif
+*/
 
 #ifdef LCE_HOOK_KEYCTL
   ENTRY(keyctl),
 #endif
 
 };
+
+#undef GEN_HOOK
