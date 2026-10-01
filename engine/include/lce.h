@@ -45,16 +45,18 @@ static DEFINE_SPINLOCK(lce_hashtbl_lock);
 
 /*** PROCFILE ***/
 
+#define LCE_PROCFILE_PATH "/proc/lce"
+#define LCE_PROCFILE_PERM 0400 // -r--------
 static int lce_proc_open(struct inode *inode, struct file *file);
 static ssize_t lce_proc_read(struct file *file, char __user *ubuf, size_t count, loff_t *ppos);
+static struct proc_dir_entry *lce_proc_entry;
 
 /*** HOOKS ***/
 
-extern atomic_t hooks_ready;
-extern atomic_t hooks_collecting;
+extern atomic_t lce_ready;
 
 #define LCE_HOOK_GUARD()\
-if(!atomic_read(&hooks_ready) || !atomic_read(&hooks_collecting))\
+if(!atomic_read(&lce_ready) || !atomic_read(&lce_collecting))\
   return 0;
 
 enum lce_event_type
@@ -363,6 +365,7 @@ static struct kprobe lce_kprobes[] = {
   .maxactive = 0,\
 }
 
+
 static struct kretprobe lce_kretprobes[] = {
 
 #ifdef LCE_HOOK_OPEN
@@ -490,5 +493,8 @@ static struct kretprobe lce_kretprobes[] = {
 #endif
 
 };
+
+static int lce_nr_kprobes    = ARRAY_SIZE(lce_kprobes);
+static int lce_nr_kretprobes = ARRAY_SIZE(lce_kretprobes);
 
 #undef GEN_HOOK
