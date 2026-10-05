@@ -4,6 +4,8 @@
 #include<stdlib.h>
 #include<string.h>
 
+#include "logging.h"
+
 int get_os_release(char **out)
 {
   /* Reads Linux Distribution name
