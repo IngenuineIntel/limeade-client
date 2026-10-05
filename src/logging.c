@@ -1,10 +1,13 @@
 // logging.c
 // manager for all logging
 
+#include<stdarg.h>
 #include<stdbool.h>
 #include<stdio.h>
 #include<time.h>
 #include<unistd.h>
+
+#include<logging.h>
 
 // standard ANSI colors
 static char ANSI_BLUE[]   = "\033[34m";
@@ -52,11 +55,6 @@ void set_log_level(int level)
   log_level = level;
 }
 
-#define enable_logging() set_log_level(2)
-#define enable_verbose_logging() set_log_level(3)
-#define enable_really_verbose_logging() set_log_level(4)
-#define disable_logging() set_log_level(0)
-
 void logging_set_colors(bool choice)
 {
   logging_colors_enabled = choice;
@@ -99,55 +97,62 @@ char *logging_file_timestamp(void)
   return logging_timestamp_buffer;
 }
 
-
-#define LOG_INNER(lvl, ...)\
-  if(log_level >= lvl) fprintf(*logging_output, __VA_ARGS__);
+#define LOG_INNER(lvl, msg, ...)         \
+if(log_level >= lvl)                     \
+{                                        \
+  va_list arg;                           \
+  va_start(arg, msg);                    \
+  fprintf(*logging_output, __VA_ARGS__); \
+  vfprintf(*logging_output, msg, arg);   \
+  fprintf(*logging_output, "\n");        \
+}
 
 #define LOG_TIME()\
   (logging_colors_enabled ? logging_stdout_timestamp() : logging_file_timestamp())
 
-void log_dbg(const char *msg)
+void log_dbg(const char *msg, ...)
 {
-  LOG_INNER(2, "[%s%s%s][%sDBG1%s]: %s\n", log_blue, LOG_TIME(), log_reset, log_cyan, log_reset, msg);
+  LOG_INNER(2, msg, "[%s%s%s][%sDBG%s]: ", log_blue, LOG_TIME(), log_reset, log_cyan, log_reset);
 }
 
-void log_dbg2(const char *msg)
+void log_dbg2(const char *msg, ...)
 {
-  LOG_INNER(3, "[%s%s%s][%sDBG2%s]: %s\n", log_blue, LOG_TIME(), log_reset, log_cyan, log_reset, msg);
+  LOG_INNER(3, msg, "[%s%s%s][%sDBG2%s]: ", log_blue, LOG_TIME(), log_reset, log_cyan, log_reset);
 }
 
-void log_dbgerr(const char *msg)
+void log_dbgerr(const char *msg, ...)
 {
-  LOG_INNER(4, "[%s%s%s][%sDBGERR%s]: %s\n", log_blue, LOG_TIME(), log_reset, log_red, log_reset, msg);
+  LOG_INNER(4, msg, "[%s%s%s][%sDBGERR%s]: ", log_blue, LOG_TIME(), log_reset, log_red, log_reset);
 }
 
-void log_dbg3(const char *msg)
+void log_dbg3(const char *msg, ...)
 {
-  LOG_INNER(4, "[%s%s%s][%sDBG3%s]: %s\n", log_blue, LOG_TIME(), log_reset, log_cyan, log_reset, msg);
+  LOG_INNER(4, msg, "[%s%s%s][%sDBG3%s]: ", log_blue, LOG_TIME(), log_reset, log_cyan, log_reset);
 }
 
-void log_info(const char *msg)
+void log_info(const char *msg, ...)
 {
-  LOG_INNER(1, "[%s%s%s][%sINFO%s]: %s\n", log_blue, LOG_TIME(), log_reset, log_green, log_reset, msg);
+  LOG_INNER(1, msg, "[%s%s%s][%sINFO%s]: ", log_blue, LOG_TIME(), log_reset, log_green, log_reset);
 }
 
-void log_warn(const char *msg)
+void log_warn(const char *msg, ...)
 {
-  LOG_INNER(1, "[%s%s%s][%sWARN%s]: %s\n", log_blue, LOG_TIME(), log_reset, log_yellow, log_reset, msg);
+  LOG_INNER(1, msg, "[%s%s%s][%sWARN%s]: ", log_blue, LOG_TIME(), log_reset, log_yellow, log_reset);
 }
 
-void log_crit(const char *msg)
+void log_crit(const char *msg, ...)
 {
-  LOG_INNER(1, "[%s%s%s][%sCRIT%s]: %s\n", log_blue, LOG_TIME(), log_reset, log_red, log_reset, msg);
+  LOG_INNER(1, msg, "[%s%s%s][%sCRIT%s]: ", log_blue, LOG_TIME(), log_reset, log_red, log_reset);
 }
 
-void log_err(const char *msg)
+void log_err(const char *msg, ...)
 {
-  LOG_INNER(1, "[%s%s%s][%sERRR%s]: %s\n", log_blue, LOG_TIME(), log_reset, log_red, log_reset, msg);
+  LOG_INNER(1, msg, "[%s%s%s][%sERRR%s]: ", log_blue, LOG_TIME(), log_reset, log_red, log_reset);
 }
 
 #define logging_init() logging_set_colors(true)
 
+/*
 int main()
 {
   logging_init();
@@ -180,5 +185,5 @@ int main()
   log_crit("this is a critical warning!");
   log_err("this is an error message!");
 
-  }
-
+}
+*/
