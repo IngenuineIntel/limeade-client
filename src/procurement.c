@@ -47,9 +47,9 @@ int get_os_release(char **out)
     if(memcmp(line_start, "PRETTY_NAME", key_len) == 0)
     {
       equals += 2; // jump over '="'
-      val_len = (line_end - 1) - (equals) + 1;
-      *out = malloc(val_len);
-      memcpy(*out, equals, val_len - 1);
+      val_len = line_end - equals - 1;
+      *out = malloc(val_len + 1);
+      memcpy(*out, equals, val_len);
       *out[val_len] = '\0';
       return 0;
     }
@@ -259,7 +259,6 @@ int get_cpu_info(struct cpu_info *out)
 int main()
 {
   int ret;
-  /*
   char *distro;
   ret = get_os_release(&distro);
   printf("%i\n", ret);
@@ -267,7 +266,6 @@ int main()
     printf("%s\n", distro);
   free(distro);
   return 0;
-  */
 
   /*
   struct mem_info m;
