@@ -1,4 +1,4 @@
-// lce.c
+// main.c
 
 #include<linux/cred.h>
 #include<linux/hashtable.h>
@@ -6,13 +6,10 @@
 
 #include "lce.h"
 
-MODULE_LICENSE("AGPL");
+MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Roan Rothrock");
 MODULE_DESCRIPTION("Limeade Client Engine");
 MODULE_VERSION("0.1");
-
-
-atomic_t lce_ready      = ATOMIC_INIT(0);
 
 static const struct proc_ops lce_proc_ops = {
   .proc_open = lce_proc_open,

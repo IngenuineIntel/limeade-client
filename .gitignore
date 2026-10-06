@@ -2,3 +2,5 @@
 *.so
 
 *.out
+
+engine/build/*

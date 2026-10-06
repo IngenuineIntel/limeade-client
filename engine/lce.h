@@ -47,8 +47,8 @@ static DEFINE_SPINLOCK(lce_hashtbl_lock);
 
 #define LCE_PROCFILE_PATH "/proc/lce"
 #define LCE_PROCFILE_PERM 0400 // -r--------
-static int lce_proc_open(struct inode *inode, struct file *file);
-static ssize_t lce_proc_read(struct file *file, char __user *ubuf, size_t count, loff_t *ppos);
+int lce_proc_open(struct inode *inode, struct file *file);
+ssize_t lce_proc_read(struct file *file, char __user *ubuf, size_t count, loff_t *ppos);
 static struct proc_dir_entry *lce_proc_entry;
 
 /*** HOOKS ***/
@@ -56,7 +56,7 @@ static struct proc_dir_entry *lce_proc_entry;
 extern atomic_t lce_ready;
 
 #define LCE_HOOK_GUARD()\
-if(!atomic_read(&lce_ready) || !atomic_read(&lce_collecting))\
+if(!atomic_read(&lce_ready))\
   return 0;
 
 enum lce_event_type
@@ -76,16 +76,19 @@ enum lce_event_type
   LCE_EVENT_EXECVE,
   LCE_EVENT_KILL,
 
+  LCE_EVENT_BIND,
   LCE_EVENT_SENDTO,
   LCE_EVENT_RECVFROM,
   LCE_EVENT_CONNECT,
   LCE_EVENT_ACCEPT,
 
   LCE_EVENT_SETUID,
+  LCE_EVENT_SETEUID,
   LCE_EVENT_SETFSUID,
   LCE_EVENT_SETRESUID,
   LCE_EVENT_SETGID,
   LCE_EVENT_SETEGID,
+  LCE_EVENT_SETFSGID,
   LCE_EVENT_SETRESGID,
   
   LCE_EVENT_GETPID,
@@ -110,10 +113,10 @@ enum lce_event_type
 };
 
 // copies a string from userspace
-static int lce_user_strcpy(const char __user *s, char *dst, int sz);
+int lce_user_strcpy(const char __user *s, char *dst, int sz);
 
 #define GEN_HOOK(name) int name(struct kprobe *p, struct pt_regs *regs)
-static int lce_hook_ret(struct kretprobe_instance *ri, struct pt_regs *regs);
+int lce_hook_ret(struct kretprobe_instance *ri, struct pt_regs *regs);
 
 #ifdef LCE_HOOK_OPEN
 GEN_HOOK(lce_hook_open);

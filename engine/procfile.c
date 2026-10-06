@@ -3,12 +3,12 @@
 
 #include "lce.h"
 
-static int lce_proc_open(struct inode *inode, struct file *file)
+int lce_proc_open(struct inode *inode, struct file *file)
 {
   return 0;
 }
 
-static ssize_t lce_proc_read(struct file *file, char __user *ubuf, size_t count,
+ssize_t lce_proc_read(struct file *file, char __user *ubuf, size_t count,
                              loff_t *ppos)
 {
   struct lce_event ev;

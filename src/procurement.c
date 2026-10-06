@@ -119,7 +119,7 @@ int get_mem_info(struct mem_info *out)
 
       out->ram_total_mbs = strtol(val_start, &endptr, 10);
 
-      if(endptr == val_start)
+      if(endptr == val_start || out->ram_total_mbs == 0)
         return -1;
 
       out->ram_total_mbs /= 1024;
@@ -142,7 +142,7 @@ int get_mem_info(struct mem_info *out)
 
       out->swap_total_mbs = strtol(val_start, &endptr, 10);
 
-      if(endptr == val_start)
+      if(endptr == val_start || out->swap_total_mbs == 0)
         return -1;
 
       out->swap_total_mbs /= 1024;
@@ -265,16 +265,13 @@ int main()
   if(ret == 0)
     printf("%s\n", distro);
   free(distro);
-  return 0;
 
-  /*
   struct mem_info m;
 
   ret = get_mem_info(&m);
   printf("%i\n", ret);
   if(ret == 0)
     printf("%lld\t%lld\n", m.ram_total_mbs, m.swap_total_mbs);
-  */
 
   struct cpu_info c;
 
