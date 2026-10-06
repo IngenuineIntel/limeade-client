@@ -4,6 +4,11 @@
 #ifndef _CONFIG_H
 #define _CONFIG_H
 
+// maximum number of events to be pulled per read
+// this is so that the reading program can overshoot the amount it needs to read
+// and prevent entry clobbering in the process
+#define LCE_MAX_EVENTS_PER_READ 2048
+
 // HOOK TOGGLES
 // Comment out the hooks for different switches to remove them from the final
 // executable. These options are, generally speaking, categorized by the domain

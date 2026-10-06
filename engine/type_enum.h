@@ -5,7 +5,8 @@
 #pragma once
 
 // trying my damndest to avoid collisions
-#define LCE_LINE_SEP "NEXTEVENT"
+static const char *LCE_LINE_SEP  = "NEXTEVENT";
+static const char *LCE_FIELD_SEP = "NEXTFIELD";
 
 enum lce_event_type
 {
