@@ -4,6 +4,8 @@
 // renameat / renameat2
 // send/sendmsg
 
+#pragma once
+
 #include<linux/atomic.h>
 #include<linux/hashtable.h>
 #include<linux/kfifo.h>
@@ -11,6 +13,7 @@
 #include<linux/proc_fs.h>
 
 #include"config.h"
+#include"type_enum.h"
 
 /*** KFIFO & EVENTS***/
 
@@ -58,59 +61,6 @@ extern atomic_t lce_ready;
 #define LCE_HOOK_GUARD()\
 if(!atomic_read(&lce_ready))\
   return 0;
-
-enum lce_event_type
-{
-  LCE_EVENT_OPEN,
-  LCE_EVENT_OPENAT,
-  LCE_EVENT_CLOSE,
-  LCE_EVENT_UNLINK,
-  LCE_EVENT_RENAME,
-
-  LCE_EVENT_READ,
-  LCE_EVENT_PREAD,
-  LCE_EVENT_WRITE,
-  LCE_EVENT_PWRITE,
-
-  LCE_EVENT_FORK,
-  LCE_EVENT_EXECVE,
-  LCE_EVENT_KILL,
-
-  LCE_EVENT_BIND,
-  LCE_EVENT_SENDTO,
-  LCE_EVENT_RECVFROM,
-  LCE_EVENT_CONNECT,
-  LCE_EVENT_ACCEPT,
-
-  LCE_EVENT_SETUID,
-  LCE_EVENT_SETEUID,
-  LCE_EVENT_SETFSUID,
-  LCE_EVENT_SETRESUID,
-  LCE_EVENT_SETGID,
-  LCE_EVENT_SETEGID,
-  LCE_EVENT_SETFSGID,
-  LCE_EVENT_SETRESGID,
-  
-  LCE_EVENT_GETPID,
-  LCE_EVENT_GETPPID,
-
-  LCE_EVENT_GETUID,
-  LCE_EVENT_GETEUID,
-  LCE_EVENT_GETRESUID,
-  LCE_EVENT_GETGID,
-  LCE_EVENT_GETEGID,
-  LCE_EVENT_GETPGID,
-  LCE_EVENT_GETRESGID,
-
-  LCE_EVENT_PTRACE,
-
-  /*
-  LCE_EVENT_CAPGET,
-  LCE_EVENT_CAPSET,
-  */
-
-  LCE_EVENT_KEYCTL
-};
 
 // copies a string from userspace
 int lce_user_strcpy(const char __user *s, char *dst, int sz);

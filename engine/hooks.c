@@ -84,6 +84,7 @@ int lce_hook_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
   {
     struct lce_event discard;
     (void)kfifo_get(&lce_kfifo, &discard);
+    pr_warn("LCE kfifo buffer was full, 1 event discarded");
   }
   
   kfifo_put(&lce_kfifo, ev);

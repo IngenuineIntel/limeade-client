@@ -27,8 +27,11 @@ ssize_t lce_proc_read(struct file *file, char __user *ubuf, size_t count,
     }
     spin_unlock_irqrestore(&lce_kfifo_lock, lock_flags);
 
-    len = snprintf(line, sizeof(line), "%llu\t%d\t%i\t%s\t%s\t%i", ev.ts,
-                   ev.pid, (int)ev.type, ev.arg1, ev.arg2, ev.ret);
+    // null bytes are copied so that the userspace program can use the data as
+    // strings directly without copying the data
+    len = snprintf(line, sizeof(line), "%llu\t%d\t%i\t%s\0\t%s\0\t%i%s", ev.ts,
+                   ev.pid, (int)ev.type, ev.arg1, ev.arg2, ev.ret,
+                   LCE_PROCFILE_LINE_SEP);
 
     if(len <= 0)
       continue;
