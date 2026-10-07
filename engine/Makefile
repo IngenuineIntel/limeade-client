@@ -1,8 +1,7 @@
 #!/usr/bin/make
 
 obj-m += lce.o
-lce-objs := main.o hooks.o procfile.o ready.o
-
+lce-objs := main.o hooks.o procfile.o
 KERNEL := /lib/modules/$(shell uname -r)
 KDIR ?= $(KERNEL)/build
 CWD  := $(shell pwd)

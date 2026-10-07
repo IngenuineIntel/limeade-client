@@ -69,7 +69,8 @@ static int __init lce_init(void)
   spin_lock_init(&lce_kfifo_lock);
   hash_init(lce_hashtbl);
   spin_lock_init(&lce_hashtbl_lock);
-  
+  atomic_set(&lce_ready, 0);
+
   lce_proc_entry = proc_create(LCE_PROCFILE_PATH, LCE_PROCFILE_PERM,
                                NULL, &lce_proc_ops);
   if(!lce_proc_entry)

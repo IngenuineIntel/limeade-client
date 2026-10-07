@@ -36,23 +36,25 @@ struct lce_event_pending
 
 #define LCE_HASH_BITS 8
 
-struct lce_data_wrapper_st {
-  DECLARE_KFIFO(lce_kfifo, struct lce_event, LCE_FIFO_SZ);
-  spinlock_t lce_kfifo_lock;
-  DECLARE_HASHTABLE(lce_hashtbl, LCE_HASH_BITS);
-  spinlock_t lce_hashtbl_lock;
+struct _lce_datastruct_encapsulator {
+  DECLARE_KFIFO(kfifo, struct lce_event, LCE_FIFO_SZ);
+  spinlock_t kfifo_lock;
+  DECLARE_HASHTABLE(hashtbl, LCE_HASH_BITS);
+  spinlock_t hashtbl_lock;
+  atomic_t atomic_ready;
 };
 
-#ifndef _LCE_MAIN
-extern struct lce_data_wrapper_st lce_data_wrapper;
+#ifdef _LCE_MAIN
+struct _lce_datastruct_encapsulator LCE_ENCAPSULATOR;
 #else
-struct lce_data_wrapper_st lce_data_wrapper;
+extern struct _lce_datastruct_encapsulator LCE_ENCAPSULATOR;
 #endif
 
-#define lce_kfifo        lce_data_wrapper.lce_kfifo
-#define lce_kfifo_lock   lce_data_wrapper.lce_kfifo_lock
-#define lce_hashtbl      lce_data_wrapper.lce_hashtbl
-#define lce_hashtbl_lock lce_data_wrapper.lce_hashtbl_lock
+#define lce_kfifo        LCE_ENCAPSULATOR.kfifo
+#define lce_kfifo_lock   LCE_ENCAPSULATOR.kfifo_lock
+#define lce_hashtbl      LCE_ENCAPSULATOR.hashtbl
+#define lce_hashtbl_lock LCE_ENCAPSULATOR.hashtbl_lock
+#define lce_ready        LCE_ENCAPSULATOR.atomic_ready
 
 /*** PROCFILE ***/
 
@@ -61,8 +63,6 @@ ssize_t lce_proc_read(struct file *file, char __user *ubuf, size_t count, loff_t
 static struct proc_dir_entry *lce_proc_entry;
 
 /*** HOOKS ***/
-
-extern atomic_t lce_ready;
 
 #define LCE_HOOK_GUARD()\
 if(!atomic_read(&lce_ready))\
