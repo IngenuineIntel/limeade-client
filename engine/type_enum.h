@@ -14,6 +14,7 @@ enum lce_event_type
 
   LCE_EVENT_OPEN,
   LCE_EVENT_OPENAT,
+  LCE_EVENT_OPENAT2,
   LCE_EVENT_CLOSE,
   LCE_EVENT_UNLINK,
   LCE_EVENT_RENAME,
@@ -71,6 +72,7 @@ static const char *LCE_EVENT_REPR[] = {
 
   "open",
   "openat",
+  "openat2",
   "close",
   "unlink",
   "rename",

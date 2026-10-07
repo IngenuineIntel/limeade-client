@@ -64,6 +64,7 @@ int lce_hook_ret(struct kretprobe_instance *ri, struct pt_regs *regs);
 #ifdef LCE_HOOK_OPEN
 GEN_HOOK(lce_hook_open);
 GEN_HOOK(lce_hook_openat);
+GEN_HOOK(lce_hook_openat2);
 #endif
 
 #ifdef LCE_HOOK_CLOSE
@@ -181,6 +182,7 @@ static struct kprobe lce_kprobes[] = {
 #ifdef LCE_HOOK_OPEN
   ENTRY(open, lce_hook_open),
   ENTRY(openat, lce_hook_openat),
+  ENTRY(openat2, lce_hook_openat2),
 #endif
 
 #ifdef LCE_HOOK_CLOSE
@@ -265,7 +267,6 @@ static struct kprobe lce_kprobes[] = {
 #ifdef LCE_HOOK_SETUID_FAMILY
   ENTRY(setuid, lce_hook_setuid),
   ENTRY(setuid16, lce_hook_setuid),
-  ENTRY(seteuid16, lce_hook_setuid),
   ENTRY(setfsuid, lce_hook_setfsuid),
   ENTRY(setfsuid16, lce_hook_setfsuid),
   ENTRY(setresuid, lce_hook_setresuid),
@@ -275,8 +276,6 @@ static struct kprobe lce_kprobes[] = {
 #ifdef LCE_HOOK_SETGID_FAMILY
   ENTRY(setgid, lce_hook_setgid),
   ENTRY(setgid16, lce_hook_setgid),
-  ENTRY(setegid, lce_hook_setegid),
-  ENTRY(setegid16, lce_hook_setegid),
   ENTRY(setfsgid, lce_hook_setfsgid),
   ENTRY(setfsgid16, lce_hook_setfsgid),
   ENTRY(setresgid, lce_hook_setresgid),
@@ -317,6 +316,7 @@ static struct kretprobe lce_kretprobes[] = {
 #ifdef LCE_HOOK_OPEN
   ENTRY(open),
   ENTRY(openat),
+  ENTRY(openat2),
 #endif
 
 #ifdef LCE_HOOK_CLOSE
@@ -401,8 +401,6 @@ static struct kretprobe lce_kretprobes[] = {
 #ifdef LCE_HOOK_SETUID_FAMILY
   ENTRY(setuid),
   ENTRY(setuid16),
-  ENTRY(seteuid),
-  ENTRY(seteuid16),
   ENTRY(setfsuid),
   ENTRY(setfsuid16),
   ENTRY(setresuid),
@@ -412,8 +410,6 @@ static struct kretprobe lce_kretprobes[] = {
 #ifdef LCE_HOOK_SETGID_FAMILY
   ENTRY(setgid),
   ENTRY(setgid16),
-  ENTRY(setegid),
-  ENTRY(setegid16),
   ENTRY(setfsgid),
   ENTRY(setfsgid16),
   ENTRY(setresgid),

@@ -26,8 +26,8 @@
 // executable. These options are, generally speaking, categorized by the domain
 // the syscall pertains to.
 
-#define LCE_HOOK_OPEN
-#define LCE_HOOK_CLOSE
+//#define LCE_HOOK_OPEN
+//#define LCE_HOOK_CLOSE
 #define LCE_HOOK_UNLINK
 #define LCE_HOOK_RENAME
 

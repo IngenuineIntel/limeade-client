@@ -80,6 +80,8 @@ int lce_hook_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 
   if(!lce_hashtbl_take(&ev, current->pid))
     return 0;
+  
+  pr_info("got stuff out of hash table: %i \t %s", ev.type, ev.arg1);
 
   ev.ret = regs_return_value(regs);
 
@@ -126,7 +128,7 @@ int lce_hook_open(struct kprobe *p, struct pt_regs *regs)
   if(lce_user_strcpy(path, ev.arg1, sizeof(ev.arg1)) < 0)
     return 0;
 
-  snprintf(ev.arg2, sizeof(ev.arg2), "flags=%i", flags);
+  snprintf(ev.arg2, sizeof(ev.arg2), "flags=%b", flags);
 
   LCE_PREP(ev, LCE_EVENT_OPEN);
   LCE_REGISTER(ev);
@@ -134,13 +136,34 @@ int lce_hook_open(struct kprobe *p, struct pt_regs *regs)
   return 0;
 }
 
-
 int lce_hook_openat(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
 
   regs = (struct pt_regs*)regs->di;
-  pr_info("entering openat hook");
+
+  struct lce_event ev;
+
+  const int dirfd         = (const int)regs->di;
+  const char __user *path = (const char __user*)regs->si;
+  const int flags         = (const int)regs->dx;
+
+  if(lce_user_strcpy(path, ev.arg1, sizeof(ev.arg1)) < 0)
+    return 0;
+
+  snprintf(ev.arg2, sizeof(ev.arg2), "dirfd=%i, flags=%b", dirfd, flags);
+
+  LCE_PREP(ev, LCE_EVENT_OPENAT);
+  LCE_REGISTER(ev);
+
+  return 0;
+}
+
+int lce_hook_openat2(struct kprobe *p, struct pt_regs *regs)
+{
+  LCE_HOOK_GUARD();
+
+  regs = (struct pt_regs*)regs->di;
 
   struct lce_event ev;
   struct open_how how;
@@ -150,30 +173,21 @@ int lce_hook_openat(struct kprobe *p, struct pt_regs *regs)
   const void __user *how_u = (const char __user*)regs->dx;
   const void *how_k        = (const void*)regs->dx;
 
-  pr_info("got past *regs dereferencing");
-
   if(lce_user_strcpy(path, ev.arg1, sizeof(ev.arg1)) < 0)
-    goto end;
-  pr_info("got past strcpy");
+    return 0;
 
-  if(how_u && copy_from_user(&how, how_u, sizeof(how)) != 0)
-    if(how_k && copy_from_kernel_nofault(&how, how_k, sizeof(how)) != 0)
-      goto end;
-
-  pr_info("got past copying `struct open_how how` from user");
+  if(!how_u)
+    ev.arg1[0] = '\0';
+  else if (copy_from_user_nofault(&how, how_u, sizeof(how)) != 0)
+    return 0;
 
   snprintf(ev.arg2, sizeof(ev.arg2),
            "dirfd=%i, flags=%llu, mode=%llu, resolve=%llu",
            dirfd, how.flags, how.mode, how.resolve);
 
-  LCE_PREP(ev, LCE_EVENT_OPENAT);
-
-  pr_info("got past prep");
-
+  LCE_PREP(ev, LCE_EVENT_OPENAT2);
   LCE_REGISTER(ev);
-  pr_info("seemingly successfully completed open kprobe (%i, %s)", current->pid, ev.arg1);
 
-end:
   return 0;
 }
 
