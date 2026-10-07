@@ -1,19 +1,12 @@
 // main.c
 
-#include<linux/cred.h>
-#include<linux/hashtable.h>
-#include<linux/kprobes.h>
-#include<linux/module.h>
-
+#define _LCE_MAIN
 #include "lce.h"
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Roan Rothrock");
 MODULE_DESCRIPTION("Limeade Client Engine");
 MODULE_VERSION("0.1");
-
-DEFINE_KFIFO(lce_kfifo, struct lce_event, LCE_FIFO_SZ);
-DEFINE_SPINLOCK(lce_kfifo_lock);
 
 static const struct proc_ops lce_proc_ops = {
   .proc_open = lce_proc_open,
@@ -72,7 +65,10 @@ static int __init lce_init(void)
 {
   int nr_kprobes, nr_kretprobes;
 
+  INIT_KFIFO(lce_kfifo);
+  spin_lock_init(&lce_kfifo_lock);
   hash_init(lce_hashtbl);
+  spin_lock_init(&lce_hashtbl_lock);
   
   lce_proc_entry = proc_create(LCE_PROCFILE_PATH, LCE_PROCFILE_PERM,
                                NULL, &lce_proc_ops);

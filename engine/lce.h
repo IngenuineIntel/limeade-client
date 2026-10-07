@@ -4,7 +4,8 @@
 // renameat / renameat2
 // send/sendmsg
 
-#pragma once
+#ifndef _LCE_H
+#define _LCE_H
 
 #include<linux/atomic.h>
 #include<linux/hashtable.h>
@@ -35,11 +36,23 @@ struct lce_event_pending
 
 #define LCE_HASH_BITS 8
 
-DECLARE_KFIFO(lce_kfifo, struct lce_event, LCE_FIFO_SZ);
-extern spinlock_t lce_kfifo_lock;
+struct lce_data_wrapper_st {
+  DECLARE_KFIFO(lce_kfifo, struct lce_event, LCE_FIFO_SZ);
+  spinlock_t lce_kfifo_lock;
+  DECLARE_HASHTABLE(lce_hashtbl, LCE_HASH_BITS);
+  spinlock_t lce_hashtbl_lock;
+};
 
-static DEFINE_HASHTABLE(lce_hashtbl, LCE_HASH_BITS);
-static DEFINE_SPINLOCK(lce_hashtbl_lock);
+#ifndef _LCE_MAIN
+extern struct lce_data_wrapper_st lce_data_wrapper;
+#else
+struct lce_data_wrapper_st lce_data_wrapper;
+#endif
+
+#define lce_kfifo        lce_data_wrapper.lce_kfifo
+#define lce_kfifo_lock   lce_data_wrapper.lce_kfifo_lock
+#define lce_hashtbl      lce_data_wrapper.lce_hashtbl
+#define lce_hashtbl_lock lce_data_wrapper.lce_hashtbl_lock
 
 /*** PROCFILE ***/
 
@@ -440,3 +453,5 @@ static int lce_nr_kprobes    = ARRAY_SIZE(lce_kprobes);
 static int lce_nr_kretprobes = ARRAY_SIZE(lce_kretprobes);
 
 #undef GEN_HOOK
+
+#endif /* _LCE_H */
