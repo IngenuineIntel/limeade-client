@@ -17,11 +17,6 @@
 
 /*** KFIFO & EVENTS***/
 
-// size of FIFO buffer
-#define LCE_FIFO_SZ     8192
-// size of argument representation
-#define LCE_ARG_REPR_SZ 50
-
 struct lce_event
 {
   u64 ts;
@@ -48,8 +43,6 @@ static DEFINE_SPINLOCK(lce_hashtbl_lock);
 
 /*** PROCFILE ***/
 
-#define LCE_PROCFILE_PATH "/proc/lce"
-#define LCE_PROCFILE_PERM 0400 // -r--------
 int lce_proc_open(struct inode *inode, struct file *file);
 ssize_t lce_proc_read(struct file *file, char __user *ubuf, size_t count, loff_t *ppos);
 static struct proc_dir_entry *lce_proc_entry;
@@ -146,7 +139,6 @@ GEN_HOOK(lce_hook_getppid);
 
 #ifdef LCE_HOOK_SETUID_FAMILY
 GEN_HOOK(lce_hook_setuid);
-GEN_HOOK(lce_hook_seteuid);
 GEN_HOOK(lce_hook_setresuid);
 GEN_HOOK(lce_hook_setfsuid);
 #endif
@@ -179,7 +171,7 @@ GEN_HOOK(lce_hook_keyctl);
 #endif
 
 // silly little macro to lower the amount that I have to type lol
-#define P(name) "__x64_sys_name"
+#define P(name) "__x64_sys_" #name
 #define ENTRY(symbol, func)\
 {\
   .symbol_name = P(symbol),\
@@ -271,7 +263,6 @@ static struct kprobe lce_kprobes[] = {
 #ifdef LCE_HOOK_SETUID_FAMILY
   ENTRY(setuid, lce_hook_setuid),
   ENTRY(setuid16, lce_hook_setuid),
-  ENTRY(seteuid, lce_hook_seteuid),
   ENTRY(seteuid16, lce_hook_setuid),
   ENTRY(setfsuid, lce_hook_setfsuid),
   ENTRY(setfsuid16, lce_hook_setfsuid),
@@ -313,7 +304,7 @@ static struct kprobe lce_kprobes[] = {
 #undef ENTRY
 #define ENTRY(symbol)\
 {\
-  .kp.symbol_name = "__x64_sys_symbol",\
+  .kp.symbol_name = "__x64_sys_" #symbol,\
   .handler = lce_hook_ret,\
   .maxactive = 0,\
 }

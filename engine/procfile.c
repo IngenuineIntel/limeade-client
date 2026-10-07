@@ -48,13 +48,16 @@ ssize_t lce_proc_read(struct file *file, char __user *ubuf, size_t count,
   char line[1024];
   ssize_t total = 0;
   unsigned long lock_flags;
-  int len, events_sent = 0;
+  int len;
+
+  pr_info("lce: procfile being read by process %i", current->pid);
 
   while(count > 0)
   {
     spin_lock_irqsave(&lce_kfifo_lock, lock_flags);
     if(!kfifo_get(&lce_kfifo, &ev))
     {
+      pr_err("failed to access kfifo");
       spin_unlock_irqrestore(&lce_kfifo_lock, lock_flags);
       break;
     }
@@ -68,6 +71,7 @@ ssize_t lce_proc_read(struct file *file, char __user *ubuf, size_t count,
     len = snprintf(line, sizeof(line), "%llu\t%d\t%i\t%s\0\t%s\0\t%i\n", ev.ts,
                    ev.pid, (int)ev.type, ev.arg1, ev.arg2, ev.ret);
 
+    pr_info("lce: procfile line length: %i", len);
     if(len <= 0)
       continue;
 
@@ -83,10 +87,7 @@ ssize_t lce_proc_read(struct file *file, char __user *ubuf, size_t count,
 
     total += len;
     count -= len;
-    events_sent++;
-
-    if(events_sent >= LCE_MAX_EVENTS_PER_READ)
-      break;
   }
+  pr_info("procfile read was successful (sent %ld bytes to userspace)", total);
   return total;
 }

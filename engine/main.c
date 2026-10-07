@@ -3,6 +3,7 @@
 #include<linux/cred.h>
 #include<linux/hashtable.h>
 #include<linux/kprobes.h>
+#include<linux/module.h>
 
 #include "lce.h"
 
@@ -28,9 +29,11 @@ static int lce_register_kprobes(void)
       pr_err("lce: failed to register kprobe for symbol %s (returned %i)\n",
              lce_kprobes[i].symbol_name, ret);
 
+      /*
       while(--i >= 0)
         unregister_kprobe(&lce_kprobes[i]);
       return ret;
+      */
     }
   }
   return 0;
@@ -47,9 +50,11 @@ static int lce_register_kretprobes(void)
       pr_err("lce: failed to resgister kretprobe for symbol %s (return %i)\n",
              lce_kretprobes[i].kp.symbol_name, ret);
 
+      /*
       while(--i >= 0)
         unregister_kretprobe(&lce_kretprobes[i]);
       return ret;
+      */
     }
   }
   return 0;
@@ -68,7 +73,7 @@ static int __init lce_init(void)
   {
     pr_err("lce: failed to create procfile \"%s\"\n", LCE_PROCFILE_PATH);
     proc_remove(lce_proc_entry);
-    return -ENOMEM;
+    return -1;
   }
 
   ret = lce_register_kprobes();
@@ -112,10 +117,20 @@ static void __exit lce_exit(void)
   spin_unlock_irqrestore(&lce_hashtbl_lock, lock_flags);
 
   for(i = 0; i < lce_nr_kretprobes; i++)
+  {
+    if(!lce_kretprobes[i].kp.addr)
+      continue;
     unregister_kretprobe(&lce_kretprobes[i]);
+    pr_info("unregistered kretprobe @ symbol %s", lce_kretprobes[i].kp.symbol_name);
+  }
 
   for(i = 0; i < lce_nr_kprobes; i++)
+  {
+    if(!lce_kprobes[i].addr)
+      continue;
     unregister_kprobe(&lce_kprobes[i]);
+    pr_info("unregistered kprobe @ symbol %s", lce_kprobes[i].symbol_name);
+  }
 
   proc_remove(lce_proc_entry);
 

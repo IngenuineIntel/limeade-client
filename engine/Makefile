@@ -27,3 +27,6 @@ clangd:
 	echo "-D__GNUC__" >> compile_flags.txt
 	echo "-DMODULE" >> compile_flags.txt
 
+load: all
+	sudo insmod build/lce.ko
+

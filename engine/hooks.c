@@ -2,6 +2,8 @@
 
 #include "lce.h"
 
+static unsigned int nr_discards = 0;
+
 int lce_user_strcpy(const char __user *s, char *dst, int sz)
 {
   int ret;
@@ -84,7 +86,13 @@ int lce_hook_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
   {
     struct lce_event discard;
     (void)kfifo_get(&lce_kfifo, &discard);
-    pr_warn("LCE kfifo buffer was full, 1 event discarded");
+    nr_discards++;
+    if(nr_discards >= LCE_OVERFLOW_LOG_CHUNK_SZ)
+    {
+      pr_info("lce: kfifo buffer overflowed %i times, that many events were discarded",
+              LCE_OVERFLOW_LOG_CHUNK_SZ);
+      nr_discards = 0;
+    }
   }
   
   kfifo_put(&lce_kfifo, ev);
@@ -323,20 +331,6 @@ int lce_hook_setuid(struct kprobe *p, struct pt_regs *regs)
   ev.arg2[0] = '\x00';
 
   LCE_PREP(ev, LCE_EVENT_SETUID);
-  LCE_REGISTER(ev);
-  return 0;
-}
-
-int lce_hook_seteuid(struct kprobe *p, struct pt_regs *regs)
-{
-  LCE_HOOK_GUARD();
-
-  struct lce_event ev;
-
-  snprintf(ev.arg1, sizeof(ev.arg1), "%i", (int)regs->di);
-  ev.arg2[0] = '\x00';
-
-  LCE_PREP(ev, LCE_EVENT_SETEUID);
   LCE_REGISTER(ev);
   return 0;
 }

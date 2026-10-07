@@ -34,7 +34,6 @@ enum lce_event_type
   LCE_EVENT_ACCEPT,
 
   LCE_EVENT_SETUID,
-  LCE_EVENT_SETEUID,
   LCE_EVENT_SETFSUID,
   LCE_EVENT_SETRESUID,
   LCE_EVENT_SETGID,
@@ -92,7 +91,6 @@ static const char *LCE_EVENT_REPR[] = {
   "accept",
 
   "setuid",
-  "seteuid",
   "setfsuid",
   "setresuid",
   "setgid",
