@@ -74,7 +74,7 @@ static int __init lce_init(void)
   spin_lock_init(&lce_kfifo_lock);
   hash_init(lce_hashtbl);
   spin_lock_init(&lce_hashtbl_lock);
-  atomic_set(&lce_ready, 0);
+  atomic_set_release(&lce_ready, 0);
 
   lce_proc_entry = proc_create(LCE_PROCFILE_PATH, LCE_PROCFILE_PERM,
                                NULL, &lce_proc_ops);
@@ -93,7 +93,7 @@ static int __init lce_init(void)
   if(nr_kretprobes < 0)
     goto err_2;
 
-  atomic_set(&lce_ready, 1);
+  atomic_set_release(&lce_ready, 1);
 
   pr_info("lce: loaded (%i kprobes active, %i kretprobes active, procfile @ \"/proc/%s\")",
           nr_kprobes, nr_kretprobes, LCE_PROCFILE_PATH);
@@ -115,7 +115,7 @@ static void __exit lce_exit(void)
   unsigned long lock_flags;
   int bucket, i, nr_kprobes = 0, nr_kretprobes = 0;
 
-  atomic_set(&lce_ready, 0);
+  atomic_set_release(&lce_ready, 0);
 
   spin_lock_irqsave(&lce_hashtbl_lock, lock_flags);
   hash_for_each_safe(lce_hashtbl, bucket, tmp_node, entry, node)

@@ -73,8 +73,6 @@ int lce_hook_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
 
-  regs = (struct pt_regs*)regs->di;
-
   struct lce_event ev;
   unsigned long lock_flags;
 
@@ -279,6 +277,11 @@ int lce_hook_execve(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
 
+  if(!regs->di)
+  {
+    pr_err("lce: in execve: RDI is NULL pointer");
+    return 0;
+  }
   regs = (struct pt_regs*)regs->di;
 
   struct lce_event ev;

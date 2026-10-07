@@ -60,7 +60,7 @@ ssize_t lce_proc_read(struct file *file, char __user *ubuf, size_t count, loff_t
 /*** HOOKS ***/
 
 #define LCE_HOOK_GUARD()\
-if(!atomic_read(&lce_ready))\
+if(!atomic_read_acquire(&lce_ready))\
   return 0;
 
 // copies a string from userspace
