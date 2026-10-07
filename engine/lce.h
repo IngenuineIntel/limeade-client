@@ -44,11 +44,7 @@ struct _lce_datastruct_encapsulator {
   atomic_t atomic_ready;
 };
 
-#ifdef _LCE_MAIN
-struct _lce_datastruct_encapsulator LCE_ENCAPSULATOR;
-#else
 extern struct _lce_datastruct_encapsulator LCE_ENCAPSULATOR;
-#endif
 
 #define lce_kfifo        LCE_ENCAPSULATOR.kfifo
 #define lce_kfifo_lock   LCE_ENCAPSULATOR.kfifo_lock

@@ -8,6 +8,8 @@ MODULE_AUTHOR("Roan Rothrock");
 MODULE_DESCRIPTION("Limeade Client Engine");
 MODULE_VERSION("0.1");
 
+struct _lce_datastruct_encapsulator LCE_ENCAPSULATOR;
+
 static const int lce_nr_kprobes    = ARRAY_SIZE(lce_kprobes);
 static const int lce_nr_kretprobes = ARRAY_SIZE(lce_kretprobes);
 static struct proc_dir_entry *lce_proc_entry;
