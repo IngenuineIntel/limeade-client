@@ -20,49 +20,54 @@ static const struct proc_ops lce_proc_ops = {
 
 static int lce_register_kprobes(void)
 {
-  int ret;
-  for(int i = 0; i < lce_nr_kprobes; i++)
+  int i, ret, failed = 0;
+  for(i = 0; i < lce_nr_kprobes; i++)
   {
     ret = register_kprobe(&lce_kprobes[i]);
     if(ret < 0)
     {
       pr_err("lce: failed to register kprobe for symbol %s (returned %i)\n",
              lce_kprobes[i].symbol_name, ret);
-
+      failed++;
       /*
       while(--i >= 0)
         unregister_kprobe(&lce_kprobes[i]);
       return ret;
       */
+      continue;
     }
+    pr_info("lce: registered kprobe for symbol %s", lce_kprobes[i].symbol_name);
+
   }
-  return 0;
+  return lce_nr_kprobes - failed;
 }
 
 static int lce_register_kretprobes(void)
 {
-  int ret;
-  for(int i = 0; i < lce_nr_kretprobes; i++)
+  int i, ret, failed = 0;
+  for(i = 0; i < lce_nr_kretprobes; i++)
   {
     ret = register_kretprobe(&lce_kretprobes[i]);
     if(ret < 0)
     {
       pr_err("lce: failed to resgister kretprobe for symbol %s (return %i)\n",
              lce_kretprobes[i].kp.symbol_name, ret);
-
+      failed++;
       /*
       while(--i >= 0)
         unregister_kretprobe(&lce_kretprobes[i]);
-      return ret;
+      return -1;
       */
+      continue;
     }
+    pr_info("lce: registered kretprobe for symbol %s", lce_kretprobes[i].kp.symbol_name);
   }
-  return 0;
+  return lce_nr_kretprobes - failed;
 }
 
 static int __init lce_init(void)
 {
-  int ret, i;
+  int nr_kprobes, nr_kretprobes;
 
   INIT_KFIFO(lce_kfifo);
   hash_init(lce_hashtbl);
@@ -76,27 +81,27 @@ static int __init lce_init(void)
     return -1;
   }
 
-  ret = lce_register_kprobes();
-  if(ret)
+  nr_kprobes = lce_register_kprobes();
+  if(nr_kprobes < 0)
     goto err_1;
 
-  ret = lce_register_kretprobes();
-  if(ret)
+  nr_kretprobes = lce_register_kretprobes();
+  if(nr_kretprobes < 0)
     goto err_2;
 
   atomic_set(&lce_ready, 1);
 
-  pr_info("lce: loaded (%i kprobes active, %i kretprobes active, procfile @ \"%s\"\n",
-          lce_nr_kprobes, lce_nr_kretprobes, LCE_PROCFILE_PATH);
+  pr_info("lce: loaded (%i kprobes active, %i kretprobes active, procfile @ \"/proc/%s\"\n",
+          nr_kprobes, nr_kretprobes, LCE_PROCFILE_PATH);
 
   return 0;
 
 err_2:
-  for(i = 0; i < lce_nr_kretprobes; i++)
+  for(int i = 0; i < lce_nr_kretprobes; i++)
     unregister_kprobe(&lce_kprobes[i]);
 err_1:
   proc_remove(lce_proc_entry);
-  return ret;
+  return -1;
 }
 
 static void __exit lce_exit(void)
@@ -104,7 +109,7 @@ static void __exit lce_exit(void)
   struct lce_event_pending *entry;
   struct hlist_node *tmp_node;
   unsigned long lock_flags;
-  int bucket, i;
+  int bucket, i, nr_kprobes = 0, nr_kretprobes = 0;
 
   atomic_set(&lce_ready, 0);
 
@@ -121,16 +126,20 @@ static void __exit lce_exit(void)
     if(!lce_kretprobes[i].kp.addr)
       continue;
     unregister_kretprobe(&lce_kretprobes[i]);
-    pr_info("unregistered kretprobe @ symbol %s", lce_kretprobes[i].kp.symbol_name);
+    nr_kretprobes++;
   }
+
+  pr_info("lce: unregistered %i kretprobes", nr_kretprobes);
 
   for(i = 0; i < lce_nr_kprobes; i++)
   {
     if(!lce_kprobes[i].addr)
       continue;
     unregister_kprobe(&lce_kprobes[i]);
-    pr_info("unregistered kprobe @ symbol %s", lce_kprobes[i].symbol_name);
+    nr_kprobes++;
   }
+
+  pr_info("lce: unregistered %i kprobes", nr_kprobes);
 
   proc_remove(lce_proc_entry);
 

@@ -170,11 +170,9 @@ GEN_HOOK(lce_hook_capset);
 GEN_HOOK(lce_hook_keyctl);
 #endif
 
-// silly little macro to lower the amount that I have to type lol
-#define P(name) "__x64_sys_" #name
 #define ENTRY(symbol, func)\
 {\
-  .symbol_name = P(symbol),\
+  .symbol_name = "__x64_sys_"#symbol,\
   .pre_handler = func,\
 }
 
@@ -182,7 +180,7 @@ static struct kprobe lce_kprobes[] = {
 
 #ifdef LCE_HOOK_OPEN
   ENTRY(open, lce_hook_open),
-  ENTRY(openat2, lce_hook_openat),
+  ENTRY(openat, lce_hook_openat),
 #endif
 
 #ifdef LCE_HOOK_CLOSE
@@ -214,6 +212,10 @@ static struct kprobe lce_kprobes[] = {
 #ifdef LCE_HOOK_EXECVE
   ENTRY(execve, lce_hook_execve),
   ENTRY(execveat, lce_hook_execveat),
+#endif
+
+#ifdef LCE_HOOK_KILL
+  ENTRY(kill, lce_hook_kill),
 #endif
 
 #ifdef LCE_HOOK_BIND
@@ -314,7 +316,7 @@ static struct kretprobe lce_kretprobes[] = {
 
 #ifdef LCE_HOOK_OPEN
   ENTRY(open),
-  ENTRY(openat2),
+  ENTRY(openat),
 #endif
 
 #ifdef LCE_HOOK_CLOSE

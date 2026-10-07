@@ -73,6 +73,8 @@ int lce_hook_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
 
+  regs = (struct pt_regs*)regs->di;
+
   struct lce_event ev;
   unsigned long lock_flags;
 
@@ -113,6 +115,9 @@ int lce_hook_open(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
 
+  regs = (struct pt_regs*)regs->di;
+  pr_info("entering open hook");
+
   struct lce_event ev;
 
   const char __user *path = (const char __user*)regs->di;
@@ -125,6 +130,7 @@ int lce_hook_open(struct kprobe *p, struct pt_regs *regs)
 
   LCE_PREP(ev, LCE_EVENT_OPEN);
   LCE_REGISTER(ev);
+  pr_info("seemingly successfully completed open kprobe (%i, %s)", current->pid, ev.arg1);
   return 0;
 }
 
@@ -132,6 +138,9 @@ int lce_hook_open(struct kprobe *p, struct pt_regs *regs)
 int lce_hook_openat(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
+
+  regs = (struct pt_regs*)regs->di;
+  pr_info("entering openat hook");
 
   struct lce_event ev;
   struct open_how how;
@@ -141,19 +150,28 @@ int lce_hook_openat(struct kprobe *p, struct pt_regs *regs)
   const void __user *how_u = (const char __user*)regs->dx;
   const void *how_k        = (const void*)regs->dx;
 
+  pr_info("got past *regs dereferencing");
+
   if(lce_user_strcpy(path, ev.arg1, sizeof(ev.arg1)) < 0)
     goto end;
+  pr_info("got past strcpy");
 
   if(how_u && copy_from_user(&how, how_u, sizeof(how)) != 0)
     if(how_k && copy_from_kernel_nofault(&how, how_k, sizeof(how)) != 0)
       goto end;
+
+  pr_info("got past copying `struct open_how how` from user");
 
   snprintf(ev.arg2, sizeof(ev.arg2),
            "dirfd=%i, flags=%llu, mode=%llu, resolve=%llu",
            dirfd, how.flags, how.mode, how.resolve);
 
   LCE_PREP(ev, LCE_EVENT_OPENAT);
+
+  pr_info("got past prep");
+
   LCE_REGISTER(ev);
+  pr_info("seemingly successfully completed open kprobe (%i, %s)", current->pid, ev.arg1);
 
 end:
   return 0;
@@ -162,6 +180,8 @@ end:
 int lce_hook_close(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
+
+  regs = (struct pt_regs*)regs->di;
 
   struct lce_event ev;
 
@@ -177,6 +197,8 @@ int lce_hook_unlink(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
 
+  regs = (struct pt_regs*)regs->di;
+
   struct lce_event ev;
 
   lce_user_strcpy((const char __user*)regs->di, ev.arg1, sizeof(ev.arg1));
@@ -190,6 +212,8 @@ int lce_hook_unlink(struct kprobe *p, struct pt_regs *regs)
 int lce_hook_rename(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
+
+  regs = (struct pt_regs*)regs->di;
 
   struct lce_event ev;
 
@@ -211,6 +235,8 @@ int lce_hook_fork(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
 
+  regs = (struct pt_regs*)regs->di;
+
   struct lce_event ev;
 
   ev.arg1[0] = '\x00';
@@ -224,6 +250,8 @@ int lce_hook_fork(struct kprobe *p, struct pt_regs *regs)
 int lce_hook_execve(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
+
+  regs = (struct pt_regs*)regs->di;
 
   struct lce_event ev;
 
@@ -244,6 +272,8 @@ int lce_hook_execveat(struct kprobe *p, struct pt_regs *regs)
 int lce_hook_kill(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
+
+  regs = (struct pt_regs*)regs->di;
 
   struct lce_event ev;
 
@@ -277,6 +307,8 @@ int lce_hook_connect(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
 
+  regs = (struct pt_regs*)regs->di;
+
   struct lce_event ev;
   struct sockaddr addr;
 
@@ -300,6 +332,8 @@ int lce_hook_connect(struct kprobe *p, struct pt_regs *regs)
 int lce_hook_accept(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
+
+  regs = (struct pt_regs*)regs->di;
 
   struct lce_event ev;
   struct sockaddr addr;
@@ -325,6 +359,8 @@ int lce_hook_setuid(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
 
+  regs = (struct pt_regs*)regs->di;
+
   struct lce_event ev;
 
   snprintf(ev.arg1, sizeof(ev.arg1), "%i", (int)regs->di);
@@ -339,6 +375,8 @@ int lce_hook_setfsuid(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
 
+  regs = (struct pt_regs*)regs->di;
+
   struct lce_event ev;
 
   snprintf(ev.arg1, sizeof(ev.arg1), "%i", (int)regs->di);
@@ -352,6 +390,8 @@ int lce_hook_setfsuid(struct kprobe *p, struct pt_regs *regs)
 int lce_hook_setresuid(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
+
+  regs = (struct pt_regs*)regs->di;
 
   struct lce_event ev;
 
@@ -368,6 +408,8 @@ int lce_hook_setgid(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
 
+  regs = (struct pt_regs*)regs->di;
+
   struct lce_event ev;
 
   snprintf(ev.arg1, sizeof(ev.arg1), "%i", (int)regs->di);
@@ -381,6 +423,8 @@ int lce_hook_setgid(struct kprobe *p, struct pt_regs *regs)
 int lce_hook_setegid(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
+
+  regs = (struct pt_regs*)regs->di;
 
   struct lce_event ev;
 
@@ -396,6 +440,8 @@ int lce_hook_setfsgid(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
 
+  regs = (struct pt_regs*)regs->di;
+
   struct lce_event ev;
   snprintf(ev.arg1, sizeof(ev.arg1), "%i", (int)regs->di);
   ev.arg2[0] = '\x00';
@@ -407,6 +453,8 @@ int lce_hook_setfsgid(struct kprobe *p, struct pt_regs *regs)
 int lce_hook_setresgid(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
+
+  regs = (struct pt_regs*)regs->di;
 
   struct lce_event ev;
 
@@ -423,6 +471,7 @@ int lce_hook_setresgid(struct kprobe *p, struct pt_regs *regs)
 int lce_hook_##name_lower(struct kprobe *p, struct pt_regs *regs)\
 {\
   LCE_HOOK_GUARD();\
+  regs = (struct pt_regs*)regs->di;\
   struct lce_event ev;\
   ev.arg1[0] = '\x00';\
   ev.arg2[0] = '\x00';\
@@ -447,6 +496,8 @@ int lce_hook_ptrace(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
 
+  regs = (struct pt_regs*)regs->di;
+
   struct lce_event ev;
 
   snprintf(ev.arg1, sizeof(ev.arg1), "%i", (int)regs->di); // `op`
@@ -460,6 +511,8 @@ int lce_hook_ptrace(struct kprobe *p, struct pt_regs *regs)
 int lce_hook_keyctl(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
+
+  regs = (struct pt_regs*)regs->di;
 
   struct lce_event ev;
 
