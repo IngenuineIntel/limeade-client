@@ -6,4 +6,4 @@ Client is responsible for sending.
 
 ## How It Works
 
-![Flowchar](https://github.com/IngenuineIntel/limeade-client/blob/main/engine/static/lce_diag.svg)
+![Flowchart](/static/lce_diag.svg)

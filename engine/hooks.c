@@ -89,7 +89,8 @@ int lce_hook_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
   if(kfifo_is_full(&lce_kfifo))
   {
     struct lce_event discard;
-    (void)kfifo_get(&lce_kfifo, &discard);
+    int ret = kfifo_get(&lce_kfifo, &discard);
+    (void)ret;
     nr_discards++;
     if(nr_discards >= LCE_OVERFLOW_LOG_CHUNK_SZ)
     {
@@ -113,6 +114,7 @@ int lce_hook_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 
 /*** the part with the hooks ***/
 
+#ifdef LCE_HOOK_OPEN
 int lce_hook_open(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
@@ -190,7 +192,9 @@ int lce_hook_openat2(struct kprobe *p, struct pt_regs *regs)
 
   return 0;
 }
+#endif
 
+#ifdef LCE_HOOK_CLOSE
 int lce_hook_close(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
@@ -206,7 +210,9 @@ int lce_hook_close(struct kprobe *p, struct pt_regs *regs)
   LCE_REGISTER(ev);
   return 0;
 }
+#endif
 
+#ifdef LCE_HOOK_UNLINK
 int lce_hook_unlink(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
@@ -222,7 +228,9 @@ int lce_hook_unlink(struct kprobe *p, struct pt_regs *regs)
   LCE_REGISTER(ev);
   return 0;
 }
+#endif
 
+#ifdef LCE_HOOK_RENAME
 int lce_hook_rename(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
@@ -238,13 +246,17 @@ int lce_hook_rename(struct kprobe *p, struct pt_regs *regs)
   LCE_REGISTER(ev);
   return 0;
 }
+#endif
 
+#ifdef LCE_HOOK_READ
 int lce_hook_read(struct kprobe *p, struct pt_regs *regs)
 {
   // TODO
   return 0;
 }
+#endif
 
+#ifdef LCE_HOOK_FORK
 int lce_hook_fork(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
@@ -260,7 +272,9 @@ int lce_hook_fork(struct kprobe *p, struct pt_regs *regs)
   LCE_REGISTER(ev);
   return 0;
 }
+#endif
 
+#ifdef LCE_HOOK_EXECVE
 int lce_hook_execve(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
@@ -282,7 +296,9 @@ int lce_hook_execveat(struct kprobe *p, struct pt_regs *regs)
   return 0;
   // TODO
 }
+#endif
 
+#ifdef LCE_HOOK_KILL
 int lce_hook_kill(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
@@ -298,25 +314,33 @@ int lce_hook_kill(struct kprobe *p, struct pt_regs *regs)
   LCE_REGISTER(ev);
   return 0;
 }
+#endif
 
+#ifdef LCE_HOOK_BIND
 int lce_hook_bind(struct kprobe *p, struct pt_regs *regs)
 {
   /* TODO */
   return 0;
 }
+#endif
 
+#ifdef LCE_HOOK_SENDTO
 int lce_hook_sendto(struct kprobe *p, struct pt_regs *regs)
 {
   /* TODO */
   return 0;
 }
+#endif
 
+#ifdef LCE_HOOK_RECVFROM
 int lce_hook_recvfrom(struct kprobe *p, struct pt_regs *regs)
 {
   /* TODO */
   return 0;
 }
+#endif
 
+#ifdef LCE_HOOK_CONNECT
 int lce_hook_connect(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
@@ -342,7 +366,9 @@ int lce_hook_connect(struct kprobe *p, struct pt_regs *regs)
   LCE_REGISTER(ev);
   return 0;
 }
+#endif
 
+#ifdef LCE_HOOK_ACCEPT
 int lce_hook_accept(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
@@ -368,7 +394,9 @@ int lce_hook_accept(struct kprobe *p, struct pt_regs *regs)
   LCE_REGISTER(ev);
   return 0;
 }
+#endif
 
+#ifdef LCE_HOOK_SETUID_FAMILY
 int lce_hook_setuid(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
@@ -417,7 +445,9 @@ int lce_hook_setresuid(struct kprobe *p, struct pt_regs *regs)
   LCE_REGISTER(ev);
   return 0;
 }
+#endif /* LCE_HOOK_SETUID_FAMILY */
 
+#ifdef LCE_HOOK_SETGID_FAMILY
 int lce_hook_setgid(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
@@ -464,6 +494,7 @@ int lce_hook_setresgid(struct kprobe *p, struct pt_regs *regs)
   LCE_REGISTER(ev);
   return 0;
 }
+#endif /* LCE_HOOK_SETGID_FAMILY */
 
 #define LCE_GET_HOOK(name_lower, name_upper)\
 int lce_hook_##name_lower(struct kprobe *p, struct pt_regs *regs)\
@@ -478,18 +509,27 @@ int lce_hook_##name_lower(struct kprobe *p, struct pt_regs *regs)\
   return 0;\
 }
 
+#ifdef LCE_HOOK_GETPID_FAMILY
 LCE_GET_HOOK(getpid, GETPID);
 LCE_GET_HOOK(getppid, GETPPID);
+#endif
+
+#ifdef LCE_HOOK_GETUID_FAMILY
 LCE_GET_HOOK(getuid, GETUID);
 LCE_GET_HOOK(geteuid, GETEUID);
 LCE_GET_HOOK(getresuid, GETRESUID);
+#endif
+
+#ifdef LCE_HOOK_GETGID_FAMILY
 LCE_GET_HOOK(getgid, GETGID);
 LCE_GET_HOOK(getegid, GETEGID);
 LCE_GET_HOOK(getpgid, GETPGID);
 LCE_GET_HOOK(getresgid, GETRESGID);
+#endif
 
 #undef LCE_GET_HOOK
 
+#ifdef LCE_HOOK_PTRACE
 int lce_hook_ptrace(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
@@ -505,7 +545,9 @@ int lce_hook_ptrace(struct kprobe *p, struct pt_regs *regs)
   LCE_REGISTER(ev);
   return 0;
 }
+#endif
 
+#ifdef LCE_HOOK_KEYCTL
 int lce_hook_keyctl(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();
@@ -521,4 +563,5 @@ int lce_hook_keyctl(struct kprobe *p, struct pt_regs *regs)
   LCE_REGISTER(ev);
   return 0;
 }
+#endif
 

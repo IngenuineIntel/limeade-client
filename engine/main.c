@@ -8,6 +8,9 @@ MODULE_AUTHOR("Roan Rothrock");
 MODULE_DESCRIPTION("Limeade Client Engine");
 MODULE_VERSION("0.1");
 
+static const int lce_nr_kprobes    = ARRAY_SIZE(lce_kprobes);
+static const int lce_nr_kretprobes = ARRAY_SIZE(lce_kretprobes);
+static struct proc_dir_entry *lce_proc_entry;
 static const struct proc_ops lce_proc_ops = {
   .proc_open = lce_proc_open,
   .proc_read = lce_proc_read,

@@ -60,7 +60,6 @@ extern struct _lce_datastruct_encapsulator LCE_ENCAPSULATOR;
 
 int lce_proc_open(struct inode *inode, struct file *file);
 ssize_t lce_proc_read(struct file *file, char __user *ubuf, size_t count, loff_t *ppos);
-static struct proc_dir_entry *lce_proc_entry;
 
 /*** HOOKS ***/
 
@@ -184,13 +183,14 @@ GEN_HOOK(lce_hook_capset);
 GEN_HOOK(lce_hook_keyctl);
 #endif
 
+#ifdef _LCE_MAIN
 #define ENTRY(symbol, func)\
 {\
   .symbol_name = "__x64_sys_"#symbol,\
   .pre_handler = func,\
 }
 
-static struct kprobe lce_kprobes[] = {
+struct kprobe lce_kprobes[] = {
 
 #ifdef LCE_HOOK_OPEN
   ENTRY(open, lce_hook_open),
@@ -324,7 +324,7 @@ static struct kprobe lce_kprobes[] = {
 }
 
 
-static struct kretprobe lce_kretprobes[] = {
+struct kretprobe lce_kretprobes[] = {
 
 #ifdef LCE_HOOK_OPEN
   ENTRY(open),
@@ -449,9 +449,8 @@ static struct kretprobe lce_kretprobes[] = {
 
 };
 
-static int lce_nr_kprobes    = ARRAY_SIZE(lce_kprobes);
-static int lce_nr_kretprobes = ARRAY_SIZE(lce_kretprobes);
-
 #undef GEN_HOOK
+
+#endif /* _LCE_MAIN */
 
 #endif /* _LCE_H */
