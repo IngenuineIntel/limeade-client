@@ -434,22 +434,6 @@ int lce_hook_setgid(struct kprobe *p, struct pt_regs *regs)
   return 0;
 }
 
-int lce_hook_setegid(struct kprobe *p, struct pt_regs *regs)
-{
-  LCE_HOOK_GUARD();
-
-  regs = (struct pt_regs*)regs->di;
-
-  struct lce_event ev;
-
-  snprintf(ev.arg1, sizeof(ev.arg1), "%i", (int)regs->di);
-  ev.arg2[0] = '\x00';
-
-  LCE_PREP(ev, LCE_EVENT_SETEGID);
-  LCE_REGISTER(ev);
-  return 0;
-}
-
 int lce_hook_setfsgid(struct kprobe *p, struct pt_regs *regs)
 {
   LCE_HOOK_GUARD();

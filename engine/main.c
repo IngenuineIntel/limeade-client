@@ -12,6 +12,9 @@ MODULE_AUTHOR("Roan Rothrock");
 MODULE_DESCRIPTION("Limeade Client Engine");
 MODULE_VERSION("0.1");
 
+DEFINE_KFIFO(lce_kfifo, struct lce_event, LCE_FIFO_SZ);
+DEFINE_SPINLOCK(lce_kfifo_lock);
+
 static const struct proc_ops lce_proc_ops = {
   .proc_open = lce_proc_open,
   .proc_read = lce_proc_read,
@@ -69,7 +72,6 @@ static int __init lce_init(void)
 {
   int nr_kprobes, nr_kretprobes;
 
-  INIT_KFIFO(lce_kfifo);
   hash_init(lce_hashtbl);
   
   lce_proc_entry = proc_create(LCE_PROCFILE_PATH, LCE_PROCFILE_PERM,

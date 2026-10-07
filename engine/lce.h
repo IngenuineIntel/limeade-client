@@ -35,8 +35,8 @@ struct lce_event_pending
 
 #define LCE_HASH_BITS 8
 
-static DEFINE_KFIFO(lce_kfifo, struct lce_event, LCE_FIFO_SZ);
-static DEFINE_SPINLOCK(lce_kfifo_lock);
+DECLARE_KFIFO(lce_kfifo, struct lce_event, LCE_FIFO_SZ);
+extern spinlock_t lce_kfifo_lock;
 
 static DEFINE_HASHTABLE(lce_hashtbl, LCE_HASH_BITS);
 static DEFINE_SPINLOCK(lce_hashtbl_lock);
