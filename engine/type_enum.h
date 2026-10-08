@@ -55,7 +55,9 @@ enum lce_event_type
   LCE_EVENT_CAPSET,
   */
 
-  LCE_EVENT_KEYCTL
+  LCE_EVENT_KEYCTL,
+
+  LCE_EVENT_MAX
 };
 
 #ifndef __KERNEL__
@@ -114,6 +116,8 @@ static const char *LCE_EVENT_REPR[] = {
   */
 
   "keyctl",
+
+  "invalid",
 };
 
 #endif /* __KERNEL */

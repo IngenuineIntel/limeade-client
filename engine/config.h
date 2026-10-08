@@ -28,7 +28,6 @@
 
 // NOISE LEVELS
 // are a subjective baseline you can use to decide which hooks you want on & off
-// default is 0
 //
 // 0: absolutely no noise, doesn't get called very often
 // 1: not really any noise, but does get called
@@ -36,29 +35,38 @@
 // 3: very common, high noise
 // 4: very common, could make the queue unstable in some configurations
 
-//#define LCE_HOOK_OPEN    // 3
-//#define LCE_HOOK_CLOSE // 4
-#define LCE_HOOK_UNLINK  // 2
-#define LCE_HOOK_RENAME  // 1
+//#define LCE_HOOK_OPEN   // 3
+//#define LCE_HOOK_CLOSE  // 4
+#define LCE_HOOK_UNLINK   // 2
+#define LCE_HOOK_RENAME   // 1
 
-//#define LCE_HOOK_READ  // 4
-//#define LCE_HOOK_WRITE // 4
+//#define LCE_HOOK_READ   // 4
+//#define LCE_HOOK_WRITE  // 4
 
-#define LCE_HOOK_FORK    // 1
-#define LCE_HOOK_EXECVE  // 1
-#define LCE_HOOK_KILL    // 0
+#define LCE_HOOK_FORK     // 1
+#define LCE_HOOK_EXECVE   // 1
+#define LCE_HOOK_KILL     // 0
 
-#define LCE_HOOK_BIND    // 0
-#define LCE_HOOK_SENDTO  // 0
-#define LCE_HOOK_RECVFROM
-#define LCE_HOOK_CONNECT
-#define LCE_HOOK_ACCEPT
+#define LCE_HOOK_BIND     // 0
+#define LCE_HOOK_SENDTO   // 0
+#define LCE_HOOK_RECVFROM // 0
+#define LCE_HOOK_CONNECT  // 1
+#define LCE_HOOK_ACCEPT   // 1
 
-#define LCE_HOOK_GETUID_FAMILY // getuid, geteuid, getresuid
-#define LCE_HOOK_GETGID_FAMILY // getgid, getegid, getpgid, getresgid
-#define LCE_HOOK_GETPID_FAMILY // getpid, getppid
-#define LCE_HOOK_SETUID_FAMILY // setuid, setresuid, setfsuid
-#define LCE_HOOK_SETGID_FAMILY // setgid, setegid, setpgid, setresgid, setfsgid
+// getuid, geteuid, getresuid
+#define LCE_HOOK_GETUID_FAMILY // 2
+
+// getgid, getegid, getpgid, getresgid
+#define LCE_HOOK_GETGID_FAMILY // 2
+
+// getpid, getppid
+//#define LCE_HOOK_GETPID_FAMILY
+
+// setuid, setfsuid, setresuid
+#define LCE_HOOK_SETUID_FAMILY // 1
+
+// setgid, setpgid, setresgid, setfsgid
+#define LCE_HOOK_SETGID_FAMILY // 1
 
 
 #define LCE_HOOK_PTRACE

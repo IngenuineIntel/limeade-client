@@ -253,7 +253,7 @@ struct kprobe lce_kprobes[] = {
   ENTRY(getuid, lce_hook_getuid),
   ENTRY(getuid16, lce_hook_getuid),
   ENTRY(geteuid, lce_hook_geteuid),
-  ENTRY(getduid16, lce_hook_getuid),
+  ENTRY(geteuid16, lce_hook_getuid),
   ENTRY(getresuid, lce_hook_getresuid),
   ENTRY(getresuid16, lce_hook_getresuid),
 #endif

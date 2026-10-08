@@ -79,8 +79,6 @@ int lce_hook_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
   if(!lce_hashtbl_take(&ev, current->pid))
     return 0;
   
-  pr_info("got stuff out of hash table: %i \t %s", ev.type, ev.arg1);
-
   ev.ret = regs_return_value(regs);
 
   spin_lock_irqsave(&lce_kfifo_lock, lock_flags);
@@ -106,7 +104,7 @@ int lce_hook_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 
 #define LCE_REGISTER(ev) lce_hashtbl_register(&ev)
 #define LCE_PREP(ev, ev_type)\
-  ev.ts = ktime_get_ns();\
+  ev.ts = ktime_get_real_ns();\
   ev.pid = current->pid;\
   ev.type = ev_type;\
 
