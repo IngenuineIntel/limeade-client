@@ -18,7 +18,7 @@ all:
 	$(MAKE) -C $(KDIR) M=$(SRC) MO=$(OUT) modules
 
 clangd:
-	echo "-I$(KERNEL)/build/arch/x86/include" >> compile_flags.txt
+	echo "-I$(KERNEL)/build/arch/x86/include" > compile_flags.txt
 	echo "-I$(KERNEL)/build/arch/x86/include/generated/uapi" >> compile_flags.txt
 	echo "-I$(KERNEL)/build/include" >> compile_flags.txt
 	echo "-D__KERNEL__" >> compile_flags.txt
@@ -29,3 +29,10 @@ clangd:
 load: all
 	sudo insmod build/lce.ko
 
+install: all
+	#sudo $(MAKE) -f $(KDIR) M=$(CWD) modules_install
+	sudo install -D -m 0644 $(abspath ./build/lce.ko) /lib/modules/$$(uname -r)/extra/lce.ko
+	sudo depmod -a
+
+clean:
+	rm -r build/

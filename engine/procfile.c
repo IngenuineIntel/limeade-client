@@ -65,8 +65,8 @@ ssize_t lce_proc_read(struct file *file, char __user *ubuf, size_t count,
 
     // null bytes are copied so that the userspace program can use the data as
     // strings directly without copying the data
-    len = snprintf(line, sizeof(line), "%llu\t%d\t%i\t%s\0\t%s\0\t%i\n", ev.ts,
-                   ev.pid, (int)ev.type, ev.arg1, ev.arg2, ev.ret);
+    len = snprintf(line, sizeof(line), "%llu\t%d\t%i\t%s%c\t%s%c\t%i\n", ev.ts,
+                   ev.pid, (int)ev.type, ev.arg1, '\0', ev.arg2, '\0', ev.ret);
 
     if(len <= 0)
       continue;

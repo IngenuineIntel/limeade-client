@@ -11,6 +11,7 @@
 #include "logging.h"
 #include "thread_pass.h"
 #include "../engine/type_enum.h"
+#include "module.h"
 
 #define MAX_EVENTS_IN_PKT 150
 
@@ -216,5 +217,13 @@ err_wo_close:
   free(buffer);
   pthread_mutex_unlock(&data->mtx_events_err);
   return NULL;
+}
+
+int main()
+{
+  load_lce();
+  // TODO
+  unload_lce();
+  return 0;
 }
 
