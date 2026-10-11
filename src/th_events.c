@@ -5,6 +5,7 @@
 #include<pthread.h>
 #include<stdlib.h>
 #include<string.h>
+#include<unistd.h>
 
 #include<liblimeade/liblimeade.h>
 
@@ -14,20 +15,139 @@
 #include "module.h"
 
 #define MAX_EVENTS_IN_PKT 150
+#define INC()\
+  line_next = memchr(line_idx, '\t', line_end - line_idx);\
+  if(!line_next)\
+  {\
+    log_warn("premature end of line, skipping");\
+    goto iter_skip;\
+  }\
+  line_idx = line_next + 1;
 
-#define INC_IDX(idx, delim, end)\
-  idx = memchr(idx, delim, end - idx);\
-  if(!idx)
+int parse_lce_stream(const void *in, unsigned int in_sz, struct limeade_indiv_event *out, unsigned int out_sz)
+{
+  /* parses LCE data intro struct limeade_indiv_event
+   * returns the number of packets successfully parsed
+   */
+  log_dbg3("we entered the function!");
+  const void *line_end, *line_idx, *line_next, *max;
+  char *endptr;
+  int nr_parsed = 0, line_rem, type;
+  int64_t ts;
+  struct limeade_indiv_event *j;
+
+  max = in + in_sz;
+  line_idx = line_end = in;
+
+  for(int i = 0; in_sz > 0 && i < out_sz; i++)
+  {
+    log_dbg3("we made it to the first memchr!");
+    line_end = memchr(line_idx, '\n', max - line_idx);
+    if(!line_end)
+      break;
+    log_dbg3("we made it past the first memchr!");
+
+    line_rem = line_end - line_idx;
+
+    j = &out[i];
+
+    log_dbg3("we survived dereferencing!");
+
+    ts = strtoll(line_idx, &endptr, 10);
+
+    log_dbg3("we survived strtoll!");
+
+    if(endptr == line_idx)
+    {
+      log_warn("failed to parse timestamp from entry, skipping");
+      goto iter_skip;
+    }
+
+    INC();
+
+    log_dbg3("we survived increment!");
+
+    j->pid = strtol(line_idx, &endptr, 10);
+    log_dbg3("we survived pid strtol! (%i)", j->pid);
+    if(endptr == line_idx)
+    {
+      log_warn("failed to parse pid, skipping");
+      goto iter_skip;
+    }
+
+    INC();
+
+    log_dbg3("we survived second increment!");
+
+    type = strtol(line_idx, &endptr, 10);
+    log_dbg3("we survived type strtol! (%i)", type);
+    if(endptr == line_idx)
+    {
+      log_warn("failed to parse type, skipping");
+      goto iter_skip;
+    }
+
+    j->syscall = (char*)LCE_EVENT_REPR[type];
+
+    log_dbg3("we survived assigning syscall!");
+
+    INC();
+
+    log_dbg3("we survied third increment!");
+
+    j->arg1 = (char*)line_idx;
+
+    INC();
+
+    j->arg2 = (char*)line_idx;
+
+    INC();
+
+    j->retval = strtol(line_idx, &endptr, 10);
+    if(endptr == line_idx)
+    {
+      log_warn("failed to parse ret, skipping");
+      goto iter_skip;
+    }
+
+    log_dbg3("ts_s=%i, ts_ms=%i, pid=%i", j->ts_ms, j->ts_ms, j->pid);
+    log_dbg3("syscall=%s", j->syscall);
+    log_dbg3("arg1=%s, arg2=%s", j->arg1, j->arg2);
+    log_dbg3("retval=%i", j->retval);
+
+    if(!ts)
+      log_warn("timestamp @ 0 somehow lol");
+    else
+    {
+      j->ts_ms  = ts       / 1000000;
+      j->ts_s   = j->ts_ms / 1000;
+      j->ts_ms -= j->ts_s;
+    }
+
+    nr_parsed++;
+
+    goto iter_end;
+    
+    iter_skip:
+    i--;
+
+    iter_end:
+
+    line_idx = ++line_end;
+    in_sz    = max - line_idx;
+
+  }
+
+  return nr_parsed;
+}
 
 void *th_events(struct thread_pass *data)
 {
   struct timespec goal_wait, iter_start, iter_end, diff, real_wait;
   struct limeade_events packet;
-  struct limeade_indiv_event *events, *j;
-  int amt, amt_rem, i, last_line, ret, type;
-  int64_t ts;
-  void *buffer, *line_start, *line_end, *idx;
-  char *endptr;
+  struct limeade_indiv_event *events;
+  int amt, i, ret;
+  void *buffer;
 
   events = calloc(sizeof(struct limeade_indiv_event), MAX_EVENTS_IN_PKT);
   buffer = malloc(65536);
@@ -61,100 +181,10 @@ void *th_events(struct thread_pass *data)
       log_err("failed to read %s: %s", data->procfile, strerror(errno));
     }
 
-    line_start = idx = buffer;
-    amt_rem = amt;
+    packet.nr_events = parse_lce_stream(buffer, amt, events, MAX_EVENTS_IN_PKT);
+    if(!packet.nr_events)
+      log_dbg2("didn't parse anything?");
 
-    for(i = 0, idx = 0; i < MAX_EVENTS_IN_PKT && amt_rem; i++)
-    {
-      type = 0;
-
-      if(!amt_rem)
-        break;
-
-      line_end = memchr(line_start, '\n', amt_rem);
-      if(!line_end)
-        break;
-
-      j = &events[i];
-
-      ts = strtoll(idx, &endptr, 10);
-      if(endptr == idx)
-      {
-        log_warn("failed to parse timestamp from entry, skipping");
-        goto iter_skip;
-      }
-  
-      INC_IDX(idx, '\t', line_end)
-      {
-        log_warn("premature end of line after timestamp, skipping");
-        goto iter_skip;
-      }
-
-      j->pid = strtol(idx, &endptr, 10);
-      if(endptr == idx)
-      {
-        log_warn("failed to parse pid from entry, skipping");
-        goto iter_skip;
-      }
-
-      INC_IDX(idx, '\t', line_end)
-      {
-        log_warn("premature end of line after pid, skipping");
-        goto iter_skip;
-      }
-
-      type = strtol(idx, &endptr, 10);
-      if(endptr == idx || type < LCE_EVENT_INVALID || type > LCE_EVENT_MAX)
-      {
-        log_warn("failed to parse type entry, skipping");
-        goto iter_skip;
-      }
-
-      INC_IDX(idx, '\t', line_end)
-      {
-        log_warn("premature end of line after type, skipping");
-        goto iter_skip;
-      }
-
-      j->arg1 = idx;
-
-      INC_IDX(idx, '\t', line_end)
-      {
-        log_warn("premature end of line after arg2, skipping");
-        goto iter_skip;
-      }
-
-      j->arg2 = idx;
-
-      INC_IDX(idx, '\t', line_end)
-      {
-        log_warn("premature end of line after arg2, skipping");
-        goto iter_skip;
-      }
-      j->retval = strtol(idx, &endptr, 10);
-      if(endptr == idx)
-      {
-        log_warn("failed to parse return val, skipping");
-        goto iter_skip;
-      }
-      j->ts_ms  = ts       / 1000000;
-      j->ts_s   = j->ts_ms / 1000;
-      j->ts_ms -= j->ts_s;
-      j->syscall = (char*)LCE_EVENT_REPR[type];
-      log_dbg3("ts_s=%i, ts_ms=%i, pid=%i", j->ts_ms, j->ts_ms, j->pid);
-      log_dbg3("syscall=%s", j->syscall);
-      log_dbg3("arg1=%s, arg2=%s", j->arg1, j->arg2);
-      log_dbg3("retval=%i", j->retval);
-
-
-      iter_skip:
-      i--;
-
-      subiter_end:
-      amt_rem -= ++line_end - line_start;
-      line_start = line_end;
-    }
-    packet.nr_events = i;
     ret = limeade_send_await(&data->lctx, LIMEADE_PACKET_EVENTS, events);
     if(ret != LIMEADE_OK)
     {
@@ -193,113 +223,26 @@ err_wo_close:
   return NULL;
 }
 
-#define INC()\
-  line_next = memchr(line_idx, '\t', line_rem);\
-  if(!line_next)\
-  {\
-    log_warn("premature end of line, skipping");\
-    goto iter_skip;\
-  }
-
-int parse_lce_stream(const void *in, unsigned int in_sz, struct limeade_indiv_event *out, unsigned int out_sz)
-{
-  /* parses LCE data intro struct limeade_indiv_event
-   * returns the number of packets successfully parsed
-   */
-  const void *line_end, *line_idx, *line_next, *max;
-  char *endptr;
-  int nr_parsed, line_rem, type;
-  int64_t ts;
-  struct limeade_indiv_event *j;
-
-  max = in + in_sz;
-  line_idx = in;
-
-  for(int i = 0; in_sz > 0 && i < out_sz; i++)
-  {
-    line_end = memchr(line_end, '\n', in_sz);
-    if(!line_end)
-      break;
-
-    line_rem = line_end - in;
-
-    j = &out[i];
-
-    ts = strtoll(line_idx, &endptr, 10);
-    if(endptr == line_idx)
-    {
-      log_warn("failed to parse timestamp from entry, skipping");
-      goto iter_skip;
-    }
-
-    INC();
-
-    j->pid = strtol(in, &endptr, 10);
-    if(endptr == line_idx)
-    {
-      log_warn("failed to parse pid, skipping");
-      goto iter_skip;
-    }
-
-    INC();
-
-    type = strtol(line_idx, &endptr, 10);
-    if(endptr == line_idx)
-    {
-      log_warn("failed to parse type, skipping");
-      goto iter_skip;
-    }
-    j->syscall = (char*)LCE_EVENT_REPR[type];
-
-    INC();
-
-    j->arg1 = (char*)line_idx;
-
-    INC();
-
-    j->arg2 = (char*)line_idx;
-
-    INC();
-
-    j->retval = strtol(line_idx, &endptr, 10);
-    if(endptr == line_idx)
-    {
-      log_warn("failed to parse ret, skipping");
-      goto iter_skip;
-    }
-
-    log_dbg3("ts_s=%i, ts_ms=%i, pid=%i", j->ts_ms, j->ts_ms, j->pid);
-    log_dbg3("syscall=%s", j->syscall);
-    log_dbg3("arg1=%s, arg2=%s", j->arg1, j->arg2);
-    log_dbg3("retval=%i", j->retval);
-
-    goto iter_end;
-    
-    iter_skip:
-    i--;
-
-    iter_end:
-
-    j->ts_ms  = ts       / 1000000;
-    j->ts_s   = j->ts_ms / 1000;
-    j->ts_ms -= j->ts_s;
-
-    line_idx = ++line_end;
-    in_sz    = max - line_idx;
-    nr_parsed++;
-
-  }
-
-  return nr_parsed;
-}
-
 #undef INC
 
+#define buff_amt 1<<10
 int main()
 {
+  logging_init();
+  enable_really_verbose_logging();
   load_lce();
-  // TODO
-  unload_lce();
+  FILE *fd = fopen("/proc/lce", "r");
+  void *unparsed_buffer = malloc(buff_amt);
+  void *parsed_buffer   = malloc(buff_amt);
+
+  fread(unparsed_buffer, 1, buff_amt, fd);
+  write(STDOUT_FILENO, unparsed_buffer, buff_amt);
+
+  printf("parsing returned %i\n", parse_lce_stream(unparsed_buffer, buff_amt, parsed_buffer, buff_amt));
+
+  fclose(fd);
+
   return 0;
 }
+#undef buff_amt
 
