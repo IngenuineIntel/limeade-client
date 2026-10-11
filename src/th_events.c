@@ -131,71 +131,48 @@ void *th_events(struct thread_pass *data)
         log_warn("premature end of line after arg2, skipping");
         goto iter_skip;
       }
-
       j->retval = strtol(idx, &endptr, 10);
       if(endptr == idx)
       {
         log_warn("failed to parse return val, skipping");
         goto iter_skip;
       }
-
       j->ts_ms  = ts       / 1000000;
       j->ts_s   = j->ts_ms / 1000;
       j->ts_ms -= j->ts_s;
-
       j->syscall = (char*)LCE_EVENT_REPR[type];
-
       log_dbg3("ts_s=%i, ts_ms=%i, pid=%i", j->ts_ms, j->ts_ms, j->pid);
       log_dbg3("syscall=%s", j->syscall);
       log_dbg3("arg1=%s, arg2=%s", j->arg1, j->arg2);
       log_dbg3("retval=%i", j->retval);
 
-      goto subiter_end;
 
       iter_skip:
-
       i--;
 
       subiter_end:
-
       amt_rem -= ++line_end - line_start;
       line_start = line_end;
-
     }
-
     packet.nr_events = i;
-
-    // NOTE TO SELF
-    // don't test until LIMEADE_PACKET_ACK includes the type of the packet _and_
-    // limeade_send_await checks for such a value
-    // NOTE TO ANYONE ELSE
-    // a program that ues liblimeade (specifically a multithreaded program) that
-    // uses both limeade_send & limeade_send_await is likely going to get weird
-    // mixups about the ACKs being sent, as it will detect the wrong ones & give
-    // false negatives
     ret = limeade_send_await(&data->lctx, LIMEADE_PACKET_EVENTS, events);
     if(ret != LIMEADE_OK)
     {
       log_err("`limeade_send` failed: %s", LIMEADE_ERROR_REPRS[i]);
       goto err;
     }
-
-
     clock_gettime(CLOCK_MONOTONIC, &iter_end);
 
     iter_end:
-
     diff.tv_sec  = iter_end.tv_sec  - iter_start.tv_sec;
     diff.tv_nsec = iter_end.tv_nsec - iter_start.tv_nsec;
     real_wait.tv_sec  = goal_wait.tv_sec  - diff.tv_sec;
     real_wait.tv_nsec = goal_wait.tv_nsec - diff.tv_nsec;
-
     if(real_wait.tv_nsec < 0) // carry
     {
       real_wait.tv_sec--;
       real_wait.tv_nsec += 999999999;
     }
-
     if(real_wait.tv_sec < 0 || real_wait.tv_nsec < 0)
     {
       log_dbg(
@@ -203,13 +180,10 @@ void *th_events(struct thread_pass *data)
         diff.tv_sec      * 999999999 + diff.tv_nsec,
         goal_wait.tv_sec * 999999999 + goal_wait.tv_nsec
       );
-
       continue;
     }
-
     nanosleep(&real_wait, &diff);
   }
-
 err:
   fclose(fd);
 err_wo_close:
@@ -218,6 +192,108 @@ err_wo_close:
   pthread_mutex_unlock(&data->mtx_events_err);
   return NULL;
 }
+
+#define INC()\
+  line_next = memchr(line_idx, '\t', line_rem);\
+  if(!line_next)\
+  {\
+    log_warn("premature end of line, skipping");\
+    goto iter_skip;\
+  }
+
+int parse_lce_stream(const void *in, unsigned int in_sz, struct limeade_indiv_event *out, unsigned int out_sz)
+{
+  /* parses LCE data intro struct limeade_indiv_event
+   * returns the number of packets successfully parsed
+   */
+  const void *line_end, *line_idx, *line_next, *max;
+  char *endptr;
+  int nr_parsed, line_rem, type;
+  int64_t ts;
+  struct limeade_indiv_event *j;
+
+  max = in + in_sz;
+  line_idx = in;
+
+  for(int i = 0; in_sz > 0 && i < out_sz; i++)
+  {
+    line_end = memchr(line_end, '\n', in_sz);
+    if(!line_end)
+      break;
+
+    line_rem = line_end - in;
+
+    j = &out[i];
+
+    ts = strtoll(line_idx, &endptr, 10);
+    if(endptr == line_idx)
+    {
+      log_warn("failed to parse timestamp from entry, skipping");
+      goto iter_skip;
+    }
+
+    INC();
+
+    j->pid = strtol(in, &endptr, 10);
+    if(endptr == line_idx)
+    {
+      log_warn("failed to parse pid, skipping");
+      goto iter_skip;
+    }
+
+    INC();
+
+    type = strtol(line_idx, &endptr, 10);
+    if(endptr == line_idx)
+    {
+      log_warn("failed to parse type, skipping");
+      goto iter_skip;
+    }
+    j->syscall = (char*)LCE_EVENT_REPR[type];
+
+    INC();
+
+    j->arg1 = (char*)line_idx;
+
+    INC();
+
+    j->arg2 = (char*)line_idx;
+
+    INC();
+
+    j->retval = strtol(line_idx, &endptr, 10);
+    if(endptr == line_idx)
+    {
+      log_warn("failed to parse ret, skipping");
+      goto iter_skip;
+    }
+
+    log_dbg3("ts_s=%i, ts_ms=%i, pid=%i", j->ts_ms, j->ts_ms, j->pid);
+    log_dbg3("syscall=%s", j->syscall);
+    log_dbg3("arg1=%s, arg2=%s", j->arg1, j->arg2);
+    log_dbg3("retval=%i", j->retval);
+
+    goto iter_end;
+    
+    iter_skip:
+    i--;
+
+    iter_end:
+
+    j->ts_ms  = ts       / 1000000;
+    j->ts_s   = j->ts_ms / 1000;
+    j->ts_ms -= j->ts_s;
+
+    line_idx = ++line_end;
+    in_sz    = max - line_idx;
+    nr_parsed++;
+
+  }
+
+  return nr_parsed;
+}
+
+#undef INC
 
 int main()
 {

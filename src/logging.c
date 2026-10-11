@@ -152,7 +152,6 @@ void log_err(const char *msg, ...)
 
 #define logging_init() logging_set_colors(true)
 
-/*
 int main()
 {
   logging_init();
@@ -186,4 +185,3 @@ int main()
   log_err("this is an error message!");
 
 }
-*/
