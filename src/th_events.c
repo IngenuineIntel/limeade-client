@@ -22,6 +22,7 @@
     log_warn("premature end of line, skipping");\
     goto iter_skip;\
   }\
+  log_dbg3("the current line has %i bytes after the current index", line_end - line_next);\
   line_idx = line_next + 1;
 
 int parse_lce_stream(const void *in, unsigned int in_sz, struct limeade_indiv_event *out, unsigned int out_sz)
@@ -87,6 +88,11 @@ int parse_lce_stream(const void *in, unsigned int in_sz, struct limeade_indiv_ev
       goto iter_skip;
     }
 
+    if(type > LCE_EVENT_MAX)
+    {
+      log_warn("type identifier %i was more than max (%i), skipping", type, LCE_EVENT_MAX);
+      goto iter_skip;
+    }
     j->syscall = (char*)LCE_EVENT_REPR[type];
 
     log_dbg3("we survived assigning syscall!");
@@ -99,9 +105,13 @@ int parse_lce_stream(const void *in, unsigned int in_sz, struct limeade_indiv_ev
 
     INC();
 
+    log_dbg3("we survived fourth increment!");
+
     j->arg2 = (char*)line_idx;
 
     INC();
+
+    log_dbg3("we survived fifth increment!");
 
     j->retval = strtol(line_idx, &endptr, 10);
     if(endptr == line_idx)
@@ -109,6 +119,8 @@ int parse_lce_stream(const void *in, unsigned int in_sz, struct limeade_indiv_ev
       log_warn("failed to parse ret, skipping");
       goto iter_skip;
     }
+
+    log_dbg3("we survived retval strtol!");
 
     log_dbg3("ts_s=%i, ts_ms=%i, pid=%i", j->ts_ms, j->ts_ms, j->pid);
     log_dbg3("syscall=%s", j->syscall);
@@ -225,22 +237,38 @@ err_wo_close:
 
 #undef INC
 
-#define buff_amt 1<<10
+#define buff_amt (1<<10)
 int main()
 {
   logging_init();
   enable_really_verbose_logging();
   load_lce();
   FILE *fd = fopen("/proc/lce", "r");
-  void *unparsed_buffer = malloc(buff_amt);
-  void *parsed_buffer   = malloc(buff_amt);
+  if(!fd)
+  {
+    log_err("failed to open \"%s\"", "/proc/lce");
+    return -1;
+  }
+  const void * const unparsed_buffer = malloc(buff_amt);
+  void * const parsed_buffer   = malloc(buff_amt);
 
-  fread(unparsed_buffer, 1, buff_amt, fd);
+  log_dbg("unparsed: %p", unparsed_buffer);
+  log_dbg("parsed:   %p", parsed_buffer);
+
+  fread((void*)unparsed_buffer, 1, buff_amt - 1, fd);
   write(STDOUT_FILENO, unparsed_buffer, buff_amt);
 
-  printf("parsing returned %i\n", parse_lce_stream(unparsed_buffer, buff_amt, parsed_buffer, buff_amt));
+  log_dbg("here we go!");
+  int ret = parse_lce_stream(unparsed_buffer, buff_amt, parsed_buffer, buff_amt);
+  log_info("parse_lce_stream() returned %i", ret);
 
   fclose(fd);
+
+  log_dbg("unparsed: %p", unparsed_buffer);
+  log_dbg("parsed:   %p", parsed_buffer);
+
+  free((void*)unparsed_buffer);
+  free(parsed_buffer);
 
   return 0;
 }
