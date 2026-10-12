@@ -1,6 +1,7 @@
 // th_events.c
 
 #include<stdlib.h>
+#include<time.h>
 #include<unistd.h>
 
 #include<liblimeade/liblimeade.h>
@@ -30,11 +31,11 @@ int parse_lce_stream(const void *in, uint32_t in_sz,
     j = &out[i];
 
     // naive memchr
+    buff_idx = line_end;
     log_dbg2("line start @ %p", line_end);
     for(; *line_end != '\n'; line_end++)
       if((void*)line_end >= buff_end)
         goto premature_end;
-    buff_idx = line_end;
     log_dbg2("line end @ %p", line_end);
 
     log_dbg3("made it to strtoll");
@@ -102,6 +103,9 @@ int parse_lce_stream(const void *in, uint32_t in_sz,
     j->ts_s   = j->ts_ms / 1000;
     j->ts_ms -= j->ts_s;
 
+    log_info("ts_s=%i, ts_ms=%i, type=%s", j->ts_s, j->ts_ms, j->syscall);
+    log_info("arg1=%s, arg2=%s, retval=%i", j->arg1, j->arg2, j->retval);
+
     goto iter_end;
 
 premature_line_end:
@@ -126,6 +130,7 @@ premature_end:
 #define proc_amt (1 << 15)
 int main()
 {
+  struct timespec start, end;
   logging_init();
   enable_really_verbose_logging();
   
@@ -142,8 +147,12 @@ int main()
   int amt = fread((void*)unparsed_buffer, 1, buff_amt - 1, fd);
   ((char*)unparsed_buffer)[amt] = '\0';
 
-  int total_parsed = parse_lce_stream(unparsed_buffer, buff_amt, parsed_buffer, proc_amt);
+  clock_gettime(CLOCK_MONOTONIC, &start);
+  int total_parsed = parse_lce_stream(unparsed_buffer, amt, parsed_buffer, proc_amt);
+  clock_gettime(CLOCK_MONOTONIC, &end);
   printf("total: %i\n", total_parsed);
+
+  log_info("total execution time was %lius", (end.tv_nsec - start.tv_nsec)/1000);
   return 0;
 
 
