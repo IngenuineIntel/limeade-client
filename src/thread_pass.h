@@ -3,6 +3,7 @@
 #pragma once
 
 #include<pthread.h>
+#include<semaphore.h>
 
 #include<liblimeade/liblimeade.h>
 
@@ -11,9 +12,11 @@
 struct thread_pass
 {
   struct limeade_context lctx; // liblimeade object
-  pthread_mutex_t mtx_shutdown; // mutex for the main thread to kill all other
-                                // threads
+  sem_t sem_shutdown; // semaphore for shutting down threads
   int event_hz, proc_hz, perf_hz; // thread interation frequency
+  
+  // the main thread will lock all of these before startings the threads, then
+  // release them when it is ready
   pthread_mutex_t mtx_events_err; // locked by the events thread on fatal error
   pthread_mutex_t mtx_proc_err;   // locked by the proc thread on fatal error
   pthread_mutex_t mtx_perf_err;   // locked by the perf thread on fatal error

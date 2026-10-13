@@ -1,5 +1,8 @@
 // th_events.c
 
+#include<errno.h>
+#include<limits.h>
+#include<semaphore.h>
 #include<stdlib.h>
 #include<time.h>
 #include<unistd.h>
@@ -7,9 +10,14 @@
 #include<liblimeade/liblimeade.h>
 
 #include "logging.h"
+#include "thread_pass.h"
 #include "../engine/type_enum.h"
 
 #define MAX(T) (~(1U<<(sizeof(T)*8-1)))
+
+#define INC(idx, end)\
+  idx = memchr(idx, '\t', end - idx);\
+  if(!idx)
 
 int parse_lce_stream(const void *in, uint32_t in_sz,
                      struct limeade_indiv_event *out, uint32_t out_sz)
@@ -32,84 +40,63 @@ int parse_lce_stream(const void *in, uint32_t in_sz,
 
     // naive memchr
     buff_idx = line_end;
-    log_dbg2("line start @ %p", line_end);
-    for(; *line_end != '\n'; line_end++)
-      if((void*)line_end >= buff_end)
-        goto premature_end;
-    log_dbg2("line end @ %p", line_end);
+    line_end = memchr(line_end, '\n', buff_end - (void*)line_end);
+    if(!line_end)
+      goto premature_end;
 
-    log_dbg3("made it to strtoll");
     ts = strtoll(buff_idx, &endptr, 10);
     if(endptr == buff_idx)
-    {
-      log_dbg2("failed to parse timestamp, skipping");
       goto skip_iter;
-    }
 
-    for(; *buff_idx != '\t'; buff_idx++)
-      if(buff_idx >= line_end)
-        goto premature_line_end;
+    INC(buff_idx, line_end)
+      goto premature_line_end;
     buff_idx++;
 
-    log_dbg3("make it to pid");
     j->pid = strtol(buff_idx, &endptr, 10);
-    if(endptr == buff_idx || j->pid == MAX(pid_t))
-    {
-      log_dbg2("failed to parse pid, skipping");
+    if(endptr == buff_idx || j->pid == INT_MAX)
       goto skip_iter;
-    }
 
-    for(; *buff_idx != '\t'; buff_idx++)
-      if(buff_idx >= line_end)
-        goto premature_line_end;
+    INC(buff_idx, line_end)
+      goto premature_line_end;
     buff_idx++;
 
-    log_dbg3("make it to type");
     type = strtol(buff_idx, &endptr, 10);
     if(endptr == buff_idx || type >= LCE_EVENT_MAX || type <= 0)
-    {
-      log_dbg2("failed to parse type, skipping");
       goto skip_iter;
-    }
     j->syscall = (char*)LCE_EVENT_REPR[type];
 
-    for(; *buff_idx != '\t'; buff_idx++)
-      if(buff_idx >= line_end)
-        goto premature_line_end;
+    INC(buff_idx, line_end)
+      goto premature_line_end;
 
     j->arg1 = (char*)++buff_idx;
 
-    for(; *buff_idx != '\t'; buff_idx++)
-      if(buff_idx >= line_end)
-        goto premature_line_end;
+
+    INC(buff_idx, line_end)
+      goto premature_line_end;
 
     j->arg2 = (char*)++buff_idx;
 
-    for(; *buff_idx != '\t'; buff_idx++)
-      if(buff_idx >= line_end)
-        goto premature_line_end;
+
+    INC(buff_idx, line_end)
+      goto premature_line_end;
     buff_idx++;
 
-    log_dbg3("make it to retval");
     j->retval = strtol(buff_idx, &endptr, 10);
-    if(endptr == buff_idx || j->retval == MAX(int))
+    if(endptr == buff_idx || j->retval == INT_MAX)
     {
-      log_dbg2("failed to parse retval, skipping");
       goto skip_iter;
     }
 
-    // TODO parsing ts into j->ts_s & j->ts_ms
     j->ts_ms  = ts / 1000000;
     j->ts_s   = j->ts_ms / 1000;
     j->ts_ms -= j->ts_s;
 
-    log_info("ts_s=%i, ts_ms=%i, type=%s", j->ts_s, j->ts_ms, j->syscall);
-    log_info("arg1=%s, arg2=%s, retval=%i", j->arg1, j->arg2, j->retval);
+    //log_dbg2("ts_s=%i, ts_ms=%i, type=%s", j->ts_s, j->ts_ms, j->syscall);
+    //log_dbg2("arg1=%s, arg2=%s, retval=%i", j->arg1, j->arg2, j->retval);
 
     goto iter_end;
 
 premature_line_end:
-    log_warn("line prematurely ended, skipping");
     
 skip_iter:
     nr_parsed--;
@@ -122,8 +109,96 @@ iter_end:
   return nr_parsed;
 
 premature_end:
-  log_warn("proc data prematurely ended");
   return nr_parsed;
+}
+
+void *th_events(struct thread_pass * const glbl_data)
+{
+  struct timespec goal_wait, iter_start, iter_end, diff, real_wait;
+  struct limeade_events pkt;
+  int amt, ret;
+  struct limeade_indiv_event * const events = malloc(128 * sizeof(struct limeade_indiv_event));
+  void * const buffer = malloc(65536);
+
+  pkt.events = events;
+  
+  goal_wait.tv_sec  = 0;
+  goal_wait.tv_nsec = 999999999/glbl_data->event_hz;
+
+  FILE *fd = fopen(glbl_data->procfile, "r");
+  if(!fd)
+  {
+    log_err("failed to open %s: %s", glbl_data->procfile, strerror(errno));
+    return NULL;
+  }
+
+  pthread_mutex_lock(&glbl_data->mtx_events_err);
+
+  log_dbg("th_events ready");
+
+  while(sem_trywait(&glbl_data->sem_shutdown) != 0 && errno == EAGAIN)
+  {
+    clock_gettime(CLOCK_MONOTONIC, &iter_start);
+
+    amt = fread(buffer, 1, 65536, fd);
+    if(!amt) // no data in procfile
+    {
+      log_dbg3("no data in procfile, skipping this iteration");
+      goto iter_end;
+    }
+    if(amt < 0)
+    {
+      log_err("failed to read %s: %s", glbl_data->procfile, strerror(errno));
+      goto err;
+    }
+    
+    pkt.nr_events = parse_lce_stream(buffer, amt, events, 128);
+    if(!pkt.nr_events)
+    {
+      log_dbg2("failed to parse any data from the procfile (%i bytes)", amt);
+      goto iter_end;
+    }
+
+    ret = limeade_send_await(&glbl_data->lctx, LIMEADE_PACKET_EVENTS, events);
+    if(ret != LIMEADE_OK)
+    {
+      log_err("limeade_send_await failed: %s", LIMEADE_ERROR_REPRS[ret]);
+      goto err;
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &iter_end);
+
+iter_end:
+
+    diff.tv_sec  = iter_end.tv_sec - iter_start.tv_sec;
+    diff.tv_nsec = iter_end.tv_nsec - iter_start.tv_nsec;
+    real_wait.tv_sec  = goal_wait.tv_sec  - diff.tv_sec;
+    real_wait.tv_nsec = goal_wait.tv_nsec - diff.tv_nsec;
+    if(real_wait.tv_nsec < 0) // carry
+    {
+      real_wait.tv_sec--;
+      real_wait.tv_nsec += 999999999;
+    }
+
+    if(real_wait.tv_sec < 0 || real_wait.tv_sec < 0)
+    {
+      log_warn(
+          "event thread took longer than the allocatedtime (%llins when the goal was %llins)",
+          ((int64_t)diff.tv_sec)      * 999999999 + diff.tv_nsec,
+          ((int64_t)goal_wait.tv_sec) * 999999999 + goal_wait.tv_nsec);
+      continue;
+    }
+
+    nanosleep(&real_wait, &diff);
+  }
+
+err:
+
+  fclose(fd);
+  free(events);
+  free(buffer);
+  pthread_mutex_unlock(&glbl_data->mtx_events_err);
+  return NULL;
 }
 
 #define buff_amt (1 << 12)
