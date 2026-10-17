@@ -7,12 +7,16 @@
 
 #include<liblimeade/liblimeade.h>
 
+#pragma once
+
 // all sending threads need a single data structure through which to communicate
 // this is that structure
 struct thread_pass
 {
   struct limeade_context lctx; // liblimeade object
   sem_t sem_shutdown; // semaphore for shutting down threads
+  sem_t sem_ready;    // semaphore for holding the initialization of the
+                      // threads
   int event_hz, proc_hz, perf_hz; // thread interation frequency
   
   // the main thread will lock all of these before startings the threads, then

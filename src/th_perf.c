@@ -5,6 +5,8 @@
 
 #include<liblimeade/liblimeade.h>
 
+#include "thread_pass.h"
+
 #define MEM_TOTAL_TARGET     "MemTotal:"
 #define MEM_FREE_TARGET      "MemFree:"
 #define MEM_AVAILABLE_TARGET "MemAvailable:"
@@ -76,6 +78,38 @@ int populate_meminfo(const char * const in, const int in_sz, struct limeade_perf
   if(endptr == cached_kb_str)
     return -1;
 
+  return 0;
+}
+
+// to measure performance, data must be taken from /proc/stat at intervals and
+// be measured against the previous read
+// this is how that data is stored
+struct statinfo
+{
+  // TODO
+};
+
+int populate_statinfo(const char * const in, const int in_sz, struct statinfo *const out)
+{
+  // TODO
+  return 0;
+}
+
+int8_t cpu_usage_from_stat(struct statinfo *start, struct statinfo *end, uint32_t interval_ms)
+{
+  // TODO
+  return 0;
+}
+
+void *th_perf(struct thread_pass *data)
+{
+  // TODO
+  return NULL;
+}
+
+int main()
+{
+  // TODO
   return 0;
 }
 

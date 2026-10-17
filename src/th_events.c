@@ -4,6 +4,7 @@
 #include<limits.h>
 #include<semaphore.h>
 #include<stdlib.h>
+#include<string.h>
 #include<time.h>
 #include<unistd.h>
 
@@ -133,9 +134,8 @@ void *th_events(struct thread_pass * const glbl_data)
   }
 
   pthread_mutex_lock(&glbl_data->mtx_events_err);
-
   log_dbg("th_events ready");
-
+  sem_wait(&glbl_data->sem_ready);
   while(sem_trywait(&glbl_data->sem_shutdown) != 0 && errno == EAGAIN)
   {
     clock_gettime(CLOCK_MONOTONIC, &iter_start);
@@ -166,9 +166,9 @@ void *th_events(struct thread_pass * const glbl_data)
       goto err;
     }
 
-    clock_gettime(CLOCK_MONOTONIC, &iter_end);
-
 iter_end:
+
+    clock_gettime(CLOCK_MONOTONIC, &iter_end);
 
     diff.tv_sec  = iter_end.tv_sec - iter_start.tv_sec;
     diff.tv_nsec = iter_end.tv_nsec - iter_start.tv_nsec;
@@ -183,7 +183,7 @@ iter_end:
     if(real_wait.tv_sec < 0 || real_wait.tv_sec < 0)
     {
       log_warn(
-          "event thread took longer than the allocatedtime (%llins when the goal was %llins)",
+          "event thread took longer than the allocated time (%llins when the goal was %llins)",
           ((int64_t)diff.tv_sec)      * 999999999 + diff.tv_nsec,
           ((int64_t)goal_wait.tv_sec) * 999999999 + goal_wait.tv_nsec);
       continue;
