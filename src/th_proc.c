@@ -15,6 +15,8 @@
 #include "logging.h"
 #include "thread_pass.h"
 
+#define log_dbg3(...) do{}while(0);
+
 struct proc_data
 {
   /* data about a certain process in its purest form
@@ -98,7 +100,7 @@ struct proc_entry *new_proc_entry(void)
 /* removes a node from the sorting data of the list */
 #define POP_SORTING_PROC_ENTRY(node)\
   if(node->sorting_prev) node->sorting_prev->sorting_next = node->sorting_next;\
-  if(node->sorting_prev) node->sorting_next->sorting_prev = node->sorting_prev;
+  if(node->sorting_next) node->sorting_next->sorting_prev = node->sorting_prev;
 
 struct proc_entry *append_proc_entry(struct proc_entry *node)
 {
@@ -122,18 +124,14 @@ inline static void pop_proc_entry(struct proc_entry *node)
     node->next->prev = node->prev;
 }
 
-static void free_proc_entries(struct proc_entry *node)
+static void free_proc_entries(struct proc_entry *head)
 {
-  /* frees double linked list
-   * any node can be provided as an argument */
-  struct proc_entry *i, *j;
-  for(j = node, i = j->next; i; j = i, i = i->next)
-    free(j);
-  free(j);
-  for(j = node, i = j->prev; i; j = i, i = i->prev)
-    free(j);
-  free(j);
-  free(j);
+  while(head)
+  {
+    struct proc_entry *next = head->next;
+    free(head);
+    head = next;
+  }
 }
 
 // keys to match while parsing /proc/[PID]/status
@@ -376,22 +374,19 @@ static int populate_proc_data(struct proc_data *data, pid_t pid)
    */
   int ret;
 
-  log_dbg3("starting command parsing");
   if((ret = populate_proc_data_command(data, pid)) < 0)
     return ret;
 
-  log_dbg3("starting status parsing");
   if((ret = populate_proc_data_status(data, pid)) < 0)
     return ret;
 
-  log_dbg3("starting stat parsing");
   if((ret = populate_proc_data_stat(data, pid)) < 0)
     return ret;
 
   return 0;
 }
 
-static int init_proc_entries(struct proc_entry *out)
+static int init_proc_entries(struct proc_entry **out)
 {
   /* creates and initializes a data structure of proc_entry
    * -1 on error, the number of elements in the list on success
@@ -426,7 +421,7 @@ static int init_proc_entries(struct proc_entry *out)
     ret--;
   }
 
-  out = mock_head.next;
+  *out = mock_head.next;
 
   return ret;
 }
@@ -440,13 +435,12 @@ static int update_proc_entries(struct proc_entry *head)
   int nr_pids = 0;
   char *endptr;
   struct proc_entry *node;
+
   DIR *dfd = opendir("/proc");
   if(!dfd)
-  {
-    log_warn("failed to open /proc: %s", strerror(errno));
     return -1;
-  }
 
+  log_dbg3("preparing sorting links");
   FOR_EVERY_PROC_ENTRY(head, node)
   {
     node->sorting_prev = node->prev;
@@ -459,20 +453,16 @@ static int update_proc_entries(struct proc_entry *head)
     if(*endptr != '\0')
       continue;
 
-    log_dbg3("starting search...");
     FOR_EVERY_PROC_ENTRY_PREDEF(head, node)
     {
-      log_dbg3("assuming we get here..?");
       if(node->data.pid != pid)
         continue;
 
-      log_dbg3("attempting to populate...");
-      if(!populate_proc_data(&node->data, pid))
+      if(populate_proc_data(&node->data, pid) < 0)
       {
         log_dbg3("failed to populate data for process %i, assuming dead", pid);
         goto proc_died;
       }
-      log_dbg3("survived population!");
 
       POP_SORTING_PROC_ENTRY(node);
 
@@ -490,11 +480,9 @@ static int update_proc_entries(struct proc_entry *head)
       goto next_search;
     }
 
-    node->next = new_proc_entry();
-    node->next->prev = node;
-    node = node->next;
+    node = append_proc_entry(head);
 
-    if(!populate_proc_data(&node->data, pid))
+    if(populate_proc_data(&node->data, pid) < 0)
     {
       log_dbg3(
           "attempted to add a new proc entry, but failed to populate it: %i",
@@ -576,41 +564,52 @@ err:
 
 int main(void)
 {
-  struct proc_entry *head = new_proc_entry(), *node;
+  struct timespec init_start, init_stop, populate_start, populate_stop;
+  struct timespec read_start, read_stop;
+  struct proc_entry *head;
   int nr;
+
+  struct timespec rqtp = {0, 100000000}, rmtp;
 
   logging_init();
   enable_really_verbose_logging();
 
-  printf("initializing proc table...\n");
-  nr = init_proc_entries(head);
+  log_warn("testing...");
+
+  clock_gettime(CLOCK_MONOTONIC, &init_start);
+  nr = init_proc_entries(&head);
+  clock_gettime(CLOCK_MONOTONIC, &init_stop);
   printf("init_proc_entries() -> %d\n", nr);
 
-  head->data.pid = 1;
-  node = append_proc_entry(head);
-  node->data.pid = getpid();
-  populate_proc_data(&node->data, node->data.pid);
-  node = append_proc_entry(node);
-  node->data.pid = getppid();
-  populate_proc_data(&node->data, node->data.pid);
+  clock_gettime(CLOCK_MONOTONIC, &read_start);
+  FOR_EVERY_PROC_ENTRY(head, node)
+  {
+    log_dbg("pid=%d ppid=%d state=%c threads=%u utime=%llu stime=%llu cmd=%s\n",
+        node->data.pid, node->data.ppid, node->data.state,
+        node->data.threads, node->data.new.utime, node->data.new.stime, node->data.command);
+  }
+  clock_gettime(CLOCK_MONOTONIC, &read_stop);
 
-  for(node = head; node; node = node->next)
-    if(node->data.pid)
-      printf("pid=%d ppid=%d state=%c threads=%u cmd=%s\n",
-          node->data.pid, node->data.ppid, node->data.state,
-          node->data.threads, node->data.command);
+  nanosleep(&rqtp, &rmtp);
 
-  puts("pausing before update...");
-  sleep(1);
+  clock_gettime(CLOCK_MONOTONIC, &populate_start);
+  nr = update_proc_entries(head);
+  clock_gettime(CLOCK_MONOTONIC, &populate_stop);
 
-  printf("update_proc_entries() -> %d\n", update_proc_entries(head));
-  for(node = head; node; node = node->next)
-    if(node->data.pid)
-      printf("pid=%d ppid=%d state=%c threads=%u cmd=%s\n",
-          node->data.pid, node->data.ppid, node->data.state,
-          node->data.threads, node->data.command);
+  log_info("init took %lluus", (init_stop.tv_nsec - init_start.tv_nsec)/1000);
+  log_info("update took %llums", (populate_stop.tv_nsec - populate_start.tv_nsec)/1000000);
+  log_info("printing took %lluus", (read_stop.tv_nsec - read_start.tv_nsec)/1000);
+
+  uint64_t total_procs;
+
+  FOR_EVERY_PROC_ENTRY(head, node)
+    total_procs ++;
+
+  log_info("total data size: %llu kB for %llu processes",
+           (total_procs * sizeof(*head))/1024, total_procs);
 
   free_proc_entries(head);
+
   return 0;
 }
 
