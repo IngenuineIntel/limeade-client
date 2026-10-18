@@ -15,8 +15,6 @@
 #include "logging.h"
 #include "thread_pass.h"
 
-#define log_dbg3(...) do{}while(0);
-
 struct proc_data
 {
   /* data about a certain process in its purest form
@@ -58,6 +56,7 @@ struct proc_data
   uint32_t rssmem;
 
   char state;
+  char name[32];
   char command[72];
 };
 
@@ -154,7 +153,7 @@ static const char PROC_THREAD_TARGET[]  = "Threads:";
     dst = strtol(src, &endptr, 10);\
     if(endptr == src)\
     {\
-      log_dbg2("failed strtol in parsing (next character was %02x", *src);\
+      log_dbg3("failed strtol in parsing (next character was %02x", *src);\
       return -1;\
     }}
 
@@ -164,7 +163,7 @@ static const char PROC_THREAD_TARGET[]  = "Threads:";
     src += sizeof(match);\
     INT_CAST(dst, src);\
     indicator = 1;\
-  }
+  }  
 
 static int populate_proc_data_status(struct proc_data *data, pid_t pid)
 {
@@ -204,7 +203,13 @@ static int populate_proc_data_status(struct proc_data *data, pid_t pid)
   {
     line_end = memchr(line_start, '\n', rem);
     if(!line_end)
-      return -1;
+    {
+      // kernel processes won't have any of the other fields, so not finding
+      // them isn't inherently unusual
+      if(!got_threads || !got_uids || !got_gids)
+        return -1;
+      else return 0;
+    }
 
     line_len = (line_end - line_start);
     idx = line_start;
@@ -246,7 +251,8 @@ static int populate_proc_data_status(struct proc_data *data, pid_t pid)
     else CHECK_AND_CAST_INT(got_rssfile, PROC_RSSFILE_TARGET, data->rssfile, idx)
     else CHECK_AND_CAST_INT(got_rssmem, PROC_RSSMEM_TARGET, data->rssmem, idx)
     else CHECK_AND_CAST_INT(got_threads, PROC_THREAD_TARGET, data->threads, idx)
-    else goto next;
+    else
+      goto next;
 
     // checks are in reverse order to how they're expected to be read to attempt
     // to limit unecessary checks
@@ -333,10 +339,9 @@ static int populate_proc_data_stat(struct proc_data *data, pid_t pid)
   return 0;
 }
 
-static int populate_proc_data_command(struct proc_data *data, pid_t pid)
+static int populate_proc_data_name(struct proc_data *data, pid_t pid)
 {
-  /* populates data->command from /proc/pid/comm & /proc/pid/cmdline
-   * 0 on success, -1 on error
+  /* populates data->name from /proc/pid/comm
    */
   char path[35];
   FILE *fd;
@@ -348,21 +353,42 @@ static int populate_proc_data_command(struct proc_data *data, pid_t pid)
   if(!fd)
     return -1;
 
-  len = fread(data->command, 1, sizeof(data->command) - 1, fd);
+  len = fread(data->name, 1, sizeof(data->name) - 1, fd);
   fclose(fd);
-  if(len <= 0)
+  if(len < 0)
     return -1;
 
-  snprintf(path, sizeof(path), "/proc/%i/cmdline", pid);
+  data->name[len] = '\0';
+
+  return 0;
+}
+
+static int populate_proc_data_command(struct proc_data *data, pid_t pid)
+{
+  /* populates data->command from /proc/pid/cmdline
+   */
+  char path[40];
+  FILE *fd;
+  int len = 0;
+
+  snprintf(path, sizeof(path), "/proc/%i/comm", pid);
 
   fd = fopen(path, "r");
   if(!fd)
     return -1;
-  
-  len += fread(data->command + len, 1, (sizeof(data->command) - 1) - len, fd);
-  fclose(fd);
 
-  data->command[len] = '\0';
+  len = fread(data->command, 1, sizeof(data->command) - 1, fd);
+  fclose(fd);
+  if(len < 0)
+    return 0;
+  
+  // these files separate argument with null bytes, so they must be sanatized
+  // I really can't imagine I can use SIMD for this
+  register char *p = data->command;
+  for(int i = 0; i < len; i++)
+    if(p[i] == '\0')
+      p[i] = ' ';
+  p[len - 1] = '\0';
 
   return 0;
 }
@@ -374,14 +400,29 @@ static int populate_proc_data(struct proc_data *data, pid_t pid)
    */
   int ret;
 
-  if((ret = populate_proc_data_command(data, pid)) < 0)
+  if((ret = populate_proc_data_name(data, pid)) < 0)
+  {
+    log_crit("name population failed");
     return ret;
+  }
+
+  if((ret = populate_proc_data_command(data, pid)) < 0)
+  {
+    log_crit("command population failed");
+    return ret;
+  }
 
   if((ret = populate_proc_data_status(data, pid)) < 0)
+  {
+    log_crit("status population failed");
     return ret;
+  }
 
   if((ret = populate_proc_data_stat(data, pid)) < 0)
+  {
+    log_crit("stat population failed");
     return ret;
+  }
 
   return 0;
 }
@@ -409,6 +450,7 @@ static int init_proc_entries(struct proc_entry **out)
     cur  = new_proc_entry();
     cur->prev  = prev;
     prev->next = cur;
+    cur->data.pid = pid;
 
     if(populate_proc_data(&cur->data, pid) >= 0)
       continue;
@@ -490,8 +532,6 @@ static int update_proc_entries(struct proc_entry *head)
       pop_proc_entry(node);
       free(node);
     }
-    else
-      log_dbg3("new process added to proc entries: %i", pid);
 
     next_search:
     nr_pids++;
@@ -565,7 +605,7 @@ err:
 int main(void)
 {
   struct timespec init_start, init_stop, populate_start, populate_stop;
-  struct timespec read_start, read_stop;
+  struct timespec print_start, print_stop, iter_start, iter_stop;
   struct proc_entry *head;
   int nr;
 
@@ -581,32 +621,38 @@ int main(void)
   clock_gettime(CLOCK_MONOTONIC, &init_stop);
   printf("init_proc_entries() -> %d\n", nr);
 
-  clock_gettime(CLOCK_MONOTONIC, &read_start);
-  FOR_EVERY_PROC_ENTRY(head, node)
-  {
-    log_dbg("pid=%d ppid=%d state=%c threads=%u utime=%llu stime=%llu cmd=%s\n",
-        node->data.pid, node->data.ppid, node->data.state,
-        node->data.threads, node->data.new.utime, node->data.new.stime, node->data.command);
-  }
-  clock_gettime(CLOCK_MONOTONIC, &read_stop);
-
   nanosleep(&rqtp, &rmtp);
 
   clock_gettime(CLOCK_MONOTONIC, &populate_start);
   nr = update_proc_entries(head);
   clock_gettime(CLOCK_MONOTONIC, &populate_stop);
 
+
+  clock_gettime(CLOCK_MONOTONIC, &print_start);
+  FOR_EVERY_PROC_ENTRY(head, node)
+  {
+    log_dbg("pid=%d ppid=%d state=%c threads=%u utime=%llu stime=%llu cmd=%s",
+        node->data.pid, node->data.ppid, node->data.state,
+        node->data.threads, node->data.new.utime, node->data.new.stime, node->data.command);
+  }
+  clock_gettime(CLOCK_MONOTONIC, &print_stop);
+
   log_info("init took %lluus", (init_stop.tv_nsec - init_start.tv_nsec)/1000);
   log_info("update took %llums", (populate_stop.tv_nsec - populate_start.tv_nsec)/1000000);
-  log_info("printing took %lluus", (read_stop.tv_nsec - read_start.tv_nsec)/1000);
+  log_info("printing took %lluus", (print_stop.tv_nsec - print_start.tv_nsec)/1000);
 
-  uint64_t total_procs;
+  uint64_t total_procs = 0;
 
+  clock_gettime(CLOCK_MONOTONIC, &iter_start);
   FOR_EVERY_PROC_ENTRY(head, node)
     total_procs ++;
+  clock_gettime(CLOCK_MONOTONIC, &iter_stop);
+
 
   log_info("total data size: %llu kB for %llu processes",
            (total_procs * sizeof(*head))/1024, total_procs);
+  log_info("time it took to iterate: %lluus",
+           (iter_stop.tv_nsec - iter_start.tv_nsec)/1000);
 
   free_proc_entries(head);
 
