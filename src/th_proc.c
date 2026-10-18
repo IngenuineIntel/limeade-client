@@ -12,7 +12,6 @@
 #include "logging.h"
 #include "thread_pass.h"
 
-// TODO make only the necessary data duplicated
 struct proc_data
 {
   /* data about a certain process in its purest form
@@ -33,9 +32,20 @@ struct proc_data
   gid_t fsgid;
 
   uint32_t threads;
-  uint64_t starttime;
-  uint64_t utime;
-  uint64_t stime;
+
+  struct
+  {
+    uint64_t starttime;
+    uint64_t utime;
+    uint64_t stime;
+  } prev;
+
+  struct
+  {
+    uint64_t starttime;
+    uint64_t utime;
+    uint64_t stime;
+  } new;
 
   uint32_t vmsize;
   uint32_t vmrss;
@@ -43,7 +53,7 @@ struct proc_data
   uint32_t rssmem;
 
   char state;
-  char command[50];
+  char command[72];
 };
 
 struct proc_entry
@@ -55,24 +65,13 @@ struct proc_entry
   struct proc_entry *prev;
   struct proc_entry *sorting_next;
   struct proc_entry *sorting_prev;
-  uint16_t idx;
-
-  struct proc_data d1;
-  struct proc_data d2;
-
-  struct proc_data *prev_data;
-  struct proc_data *next_data;
+  struct proc_data data;
 };
 
 struct proc_entry *new_proc_entry(void)
 {
   struct proc_entry *ret = malloc(sizeof(*ret));
-
-  ret->prev_data = &ret->d1;
-  ret->next_data = &ret->d2;
-
-  ret->next = ret->prev = NULL;
-  ret->sorting_next = ret->sorting_prev = NULL;
+  memset(ret, 0, sizeof(*ret));
 
   return ret;
 }
@@ -81,9 +80,9 @@ struct proc_entry *new_proc_entry(void)
 #define FOR_EVERY_PROC_ENTRY(head, i)\
   for(struct proc_entry *i = head; i; i = i->next)
 
-/* iterates over every entry, leaving the last entry at `last` */
-#define FOR_EVERY_PROC_ENTRY_LAST(head, i, last)\
-    for(struct proc_entry *i = head; i; last = i, i = i->next)
+/* iterates over every entry with a declared variable */
+#define FOR_EVERY_PROC_ENTRY_PREDEF(head, i)\
+    for(i = head; i; i = i->next)
 
 /* iterates over every entry above the provided one */
 #define FOR_EVERY_PROC_ENTRY_ABOVE(node, i)\
@@ -118,35 +117,6 @@ inline void pop_proc_entry(struct proc_entry *node)
     node->prev->next = node->next;
   if(node->next)
     node->next->prev = node->prev;
-}
-
-int index_proc_entries(struct proc_entry *head)
-{
-  /* populates double linked list with index values */
-  uint16_t ret = 0;
-  for(struct proc_entry *i = head; i; i = i->next, ret++)
-    i->idx = ret;
-  return ret;
-}
-
-struct proc_entry *pop_proc_entry_idx(uint16_t idx, struct proc_entry *node)
-{
-  /* removes a node from a double linked list and returns it
-   * only should be used on indexed lists
-   * any node of the list can be used, however, the closer the provided node is
-   * to the targeted node, the better the performance will be
-   * doesn't free any memory
-   * if the index isn't found, NULL is returned
-   */
-  if(node->idx < idx)
-    for(struct proc_entry *i = node; i; i = i->next)
-      if(i->idx == idx)
-        return i;
-  if(node->idx > idx)
-    for(struct proc_entry *i = node; i; i = i->prev)
-      if(i->idx == idx)
-        return i;
-  return NULL;
 }
 
 void free_proc_entries(struct proc_entry *node)
@@ -347,15 +317,16 @@ int populate_proc_data_stat(struct proc_data *data, pid_t pid)
   if(stat_skip_vals(&idx, max, 13) < 0)
     return -1;
 
-  data->utime = strtoll(idx, &endptr, 10);
-  if(endptr == idx) return -1;
+  data->prev.utime = data->new.utime;
+  data->prev.stime = data->new.stime;
+  data->prev.starttime = data->new.starttime;
 
   SKIP(13);
-  CAST(data->utime);
+  CAST(data->new.utime);
   SKIP(1);
-  CAST(data->stime);
+  CAST(data->new.stime);
   SKIP(7);
-  CAST(data->starttime);
+  CAST(data->new.starttime);
 
   return 0;
 }
@@ -424,13 +395,14 @@ int init_proc_entries(struct proc_entry *out)
    * -1 on error, the number of elements in the list on success
    */
   pid_t pid;
+  int ret = 0;
   char *endptr;
   struct proc_entry mock_head, *prev, *cur = &mock_head;
   DIR *dfd = opendir("/proc");
   if(!dfd)
     return -1;
 
-  for(struct dirent *entry = readdir(dfd); entry; entry = readdir(dfd))
+  for(struct dirent *entry = readdir(dfd); entry; entry = readdir(dfd), ret++)
   {
     pid = strtol(entry->d_name, &endptr, 10);
     if(endptr == entry->d_name)
@@ -441,13 +413,13 @@ int init_proc_entries(struct proc_entry *out)
     cur->prev  = prev;
     prev->next = cur;
 
-    if(populate_proc_data_command(cur->next_data, pid) < 0)
+    if(populate_proc_data_command(&cur->data, pid) < 0)
       goto iter_skip;
 
-    if(populate_proc_data_status(cur->next_data, pid) < 0)
+    if(populate_proc_data_status(&cur->data, pid) < 0)
       goto iter_skip;
 
-    if(populate_proc_data_stat(cur->next_data, pid) == 0)
+    if(populate_proc_data_stat(&cur->data, pid) == 0)
       continue;
 
     iter_skip:
@@ -455,14 +427,25 @@ int init_proc_entries(struct proc_entry *out)
     free(cur);
     cur = prev;
     prev = cur->prev;
+    ret--;
   }
 
   out = mock_head.next;
 
-  return index_proc_entries(out);
+  return ret;
 
 err:
   return -1;
+}
+
+void populate_proc_entry_sorting_indexes(struct proc_entry *head)
+{
+  /* populates sorting indexes */
+  FOR_EVERY_PROC_ENTRY(head, node)
+  {
+    node->sorting_prev = node->prev;
+    node->sorting_next = node->next;
+  }
 }
 
 int update_proc_entries(struct proc_entry *head)
@@ -470,12 +453,10 @@ int update_proc_entries(struct proc_entry *head)
   /* updates data in proc_entry data structure
    * returns the number of processes on success, & -1 on error
    */
-
   pid_t pid;
   int nr_pids = 0;
   char *endptr;
-  struct proc_entry *last;
-  struct proc_data *cur_data;
+  struct proc_entry *node;
   DIR *dfd = opendir("/proc");
   if(!dfd)
   {
@@ -483,11 +464,7 @@ int update_proc_entries(struct proc_entry *head)
     return -1;
   }
 
-  FOR_EVERY_PROC_ENTRY(head, node)
-  {
-    node->sorting_prev = node->prev;
-    node->sorting_next = node->next;
-  }
+  populate_proc_entry_sorting_indexes(head);
 
   for(struct dirent *entry = readdir(dfd); entry; entry = readdir(dfd))
   {
@@ -495,16 +472,12 @@ int update_proc_entries(struct proc_entry *head)
     if(*endptr != '\0')
       continue;
 
-    FOR_EVERY_PROC_ENTRY_LAST(head, node, last)
+    FOR_EVERY_PROC_ENTRY_PREDEF(head, node)
     {
-      if(node->next_data->pid != pid)
+      if(node->data.pid != pid)
         continue;
 
-      cur_data = node->prev_data;
-      node->prev_data = node->next_data;
-      node->next_data = cur_data;
-
-      if(!POPULATE_PROC_DATA(cur_data, pid))
+      if(!POPULATE_PROC_DATA(&node->data, pid))
       {
         log_dbg3("failed to populate data for process %i, assuming dead", pid);
         goto proc_died;
@@ -522,19 +495,17 @@ int update_proc_entries(struct proc_entry *head)
       goto next_search;
     }
 
-    last->next = new_proc_entry();
-    last->next->prev = last;
-    last = last->next;
-    cur_data = last->next_data;
-    cur_data->pid = pid;
+    node->next = new_proc_entry();
+    node->next->prev = node;
+    node = node->next;
 
-    if(!POPULATE_PROC_DATA(cur_data, pid))
+    if(!POPULATE_PROC_DATA(&node->data, pid))
     {
       log_dbg3(
           "attempted to add a new proc entry, but failed to populate it: %i",
           pid);
-      pop_proc_entry(last);
-      free(last);
+      pop_proc_entry(node);
+      free(node);
     }
     else
       log_dbg3("new process added to proc entries: %i", pid);
@@ -562,7 +533,6 @@ int dynamic_from_entries(struct proc_entry *head, struct limeade_proc_update *ou
 void *th_proc(struct thread_pass *glbl_data)
 {
   struct timespec goal_wait, iter_start, iter_end, diff, real_wait;
-  struct proc_entry *head;
 
   goal_wait.tv_sec  = 0;
   goal_wait.tv_nsec = 999999999/glbl_data->proc_hz;
