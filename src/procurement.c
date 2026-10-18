@@ -71,8 +71,8 @@ int get_mem_info(struct mem_info *out)
    * returns -1 on error
    */
 
-  char target1[] = "MemTotal";
-  char target2[] = "SwapTotal";
+  char VENDOR_ID_TARGET[] = "MemTotal";
+  char MODEL_NAME_TARGET[] = "SwapTotal";
   
   // 2048 is an arbitrary choice on my end, my instance of this file is 1671B
   char data[2048];
@@ -104,8 +104,8 @@ int get_mem_info(struct mem_info *out)
 
     line_len = (line_end - line_start);
 
-    if(sizeof(target1) < line_len
-    && memcmp(line_start, target1, sizeof(target1) - 1) == 0)
+    if(sizeof(VENDOR_ID_TARGET) < line_len
+    && memcmp(line_start, VENDOR_ID_TARGET, sizeof(VENDOR_ID_TARGET) - 1) == 0)
     {
       val_start = line_start;
 
@@ -127,8 +127,8 @@ int get_mem_info(struct mem_info *out)
       if(out->swap_total_mbs != -1)
         return 0;
 
-    } else if(sizeof(target2) < line_len
-           && memcmp(line_start, target2, sizeof(target2) - 1) == 0)
+    } else if(sizeof(MODEL_NAME_TARGET) < line_len
+           && memcmp(line_start, MODEL_NAME_TARGET, sizeof(MODEL_NAME_TARGET) - 1) == 0)
     {
       val_start = line_start;
 
@@ -162,14 +162,14 @@ struct cpu_info
   char *model_name;
 };
 
+static const char VENDOR_ID_TARGET[]  = "vendor_id";
+static const char MODEL_NAME_TARGET[] = "model name";
+
 int get_cpu_info(struct cpu_info *out)
 {
   /* Gets CPU information
    * return -1 on error
    */
-
-  char target1[] = "vendor_id";
-  char target2[] = "model name";
 
   // while this file is quite large, the necessary data should be relatively early
   char data[2048];
@@ -205,8 +205,8 @@ int get_cpu_info(struct cpu_info *out)
 
     line_len = (line_end - line_start);
 
-    if(sizeof(target1) < line_len
-    && memcmp(line_start, target1, sizeof(target1) - 1) == 0)
+    if(sizeof(VENDOR_ID_TARGET) < line_len
+    && memcmp(line_start, VENDOR_ID_TARGET, sizeof(VENDOR_ID_TARGET) - 1) == 0)
     {
       val_start = line_end;
       int sz = 0;
@@ -227,8 +227,8 @@ int get_cpu_info(struct cpu_info *out)
       if(out->model_name)
         return 0;
 
-    } else if(sizeof(target2) < line_len
-           && memcmp(line_start, target2, sizeof(target2) - 1) == 0)
+    } else if(sizeof(MODEL_NAME_TARGET) < line_len
+           && memcmp(line_start, MODEL_NAME_TARGET, sizeof(MODEL_NAME_TARGET) - 1) == 0)
     {
       val_start = line_end;
       int sz = 0;
