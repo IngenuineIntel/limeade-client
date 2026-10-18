@@ -283,7 +283,7 @@ static int stat_skip_vals(char **ptr, const char * const ptr_max, uint8_t nr_val
 }
 
 #define SKIP(nr)\
-  if(stat_skip_vals(&idx, max, 13) < 0) return -1
+  if(stat_skip_vals(&idx, max, nr) < 0) return -1
 
 #define CAST(dst)\
   dst = strtoll(idx, &endptr, 10);\
@@ -326,7 +326,6 @@ static int populate_proc_data_stat(struct proc_data *data, pid_t pid)
   data->prev.stime = data->new.stime;
   data->prev.starttime = data->new.starttime;
 
-  SKIP(13);
   CAST(data->new.utime);
   SKIP(1);
   CAST(data->new.stime);
@@ -375,24 +374,22 @@ static int populate_proc_data(struct proc_data *data, pid_t pid)
   /* populates `data` via the /proc/`pid` directory listings
    * 0 on success, -1 on error
    */
-  register int ret;
+  int ret;
 
+  log_dbg3("starting command parsing");
   if((ret = populate_proc_data_command(data, pid)) < 0)
     return ret;
 
+  log_dbg3("starting status parsing");
   if((ret = populate_proc_data_status(data, pid)) < 0)
     return ret;
 
+  log_dbg3("starting stat parsing");
   if((ret = populate_proc_data_stat(data, pid)) < 0)
     return ret;
 
   return 0;
 }
-
-#define POPULATE_PROC_DATA(data, pid)\
-  (populate_proc_data_command(data, pid) >= 0\
-  && populate_proc_data_status(data, pid) >= 0\
-  && populate_proc_data_stat(data, pid)   >= 0)
 
 static int init_proc_entries(struct proc_entry *out)
 {
@@ -418,13 +415,7 @@ static int init_proc_entries(struct proc_entry *out)
     cur->prev  = prev;
     prev->next = cur;
 
-    if(populate_proc_data_command(&cur->data, pid) < 0)
-      goto iter_skip;
-
-    if(populate_proc_data_status(&cur->data, pid) < 0)
-      goto iter_skip;
-
-    if(populate_proc_data_stat(&cur->data, pid) == 0)
+    if(populate_proc_data(&cur->data, pid) >= 0)
       continue;
 
     iter_skip:
@@ -438,19 +429,6 @@ static int init_proc_entries(struct proc_entry *out)
   out = mock_head.next;
 
   return ret;
-
-err:
-  return -1;
-}
-
-static void populate_proc_entry_sorting_indexes(struct proc_entry *head)
-{
-  /* populates sorting indexes */
-  FOR_EVERY_PROC_ENTRY(head, node)
-  {
-    node->sorting_prev = node->prev;
-    node->sorting_next = node->next;
-  }
 }
 
 static int update_proc_entries(struct proc_entry *head)
@@ -469,7 +447,11 @@ static int update_proc_entries(struct proc_entry *head)
     return -1;
   }
 
-  populate_proc_entry_sorting_indexes(head);
+  FOR_EVERY_PROC_ENTRY(head, node)
+  {
+    node->sorting_prev = node->prev;
+    node->sorting_next = node->next;
+  }
 
   for(struct dirent *entry = readdir(dfd); entry; entry = readdir(dfd))
   {
@@ -477,16 +459,20 @@ static int update_proc_entries(struct proc_entry *head)
     if(*endptr != '\0')
       continue;
 
+    log_dbg3("starting search...");
     FOR_EVERY_PROC_ENTRY_PREDEF(head, node)
     {
+      log_dbg3("assuming we get here..?");
       if(node->data.pid != pid)
         continue;
 
-      if(!POPULATE_PROC_DATA(&node->data, pid))
+      log_dbg3("attempting to populate...");
+      if(!populate_proc_data(&node->data, pid))
       {
         log_dbg3("failed to populate data for process %i, assuming dead", pid);
         goto proc_died;
       }
+      log_dbg3("survived population!");
 
       POP_SORTING_PROC_ENTRY(node);
 
@@ -494,9 +480,13 @@ static int update_proc_entries(struct proc_entry *head)
 
       proc_died:
 
+      log_dbg3("%p", node);
       pop_proc_entry(node);
+      log_dbg3("survived popping");
       free(node);
+      log_dbg3("survived freeing");
       nr_pids--;
+
       goto next_search;
     }
 
@@ -504,7 +494,7 @@ static int update_proc_entries(struct proc_entry *head)
     node->next->prev = node;
     node = node->next;
 
-    if(!POPULATE_PROC_DATA(&node->data, pid))
+    if(!populate_proc_data(&node->data, pid))
     {
       log_dbg3(
           "attempted to add a new proc entry, but failed to populate it: %i",
