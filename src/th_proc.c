@@ -9,10 +9,10 @@
 #include<string.h>
 
 #include<liblimeade/liblimeade.h>
-
 #include "logging.h"
 #include "thread_pass.h"
 
+// TODO make only the necessary data duplicated
 struct proc_data
 {
   /* data about a certain process in its purest form
@@ -43,7 +43,7 @@ struct proc_data
   uint32_t rssmem;
 
   char state;
-  char command[72];
+  char command[50];
 };
 
 struct proc_entry
@@ -53,6 +53,8 @@ struct proc_entry
    */
   struct proc_entry *next;
   struct proc_entry *prev;
+  struct proc_entry *sorting_next;
+  struct proc_entry *sorting_prev;
   uint16_t idx;
 
   struct proc_data d1;
@@ -70,9 +72,31 @@ struct proc_entry *new_proc_entry(void)
   ret->next_data = &ret->d2;
 
   ret->next = ret->prev = NULL;
+  ret->sorting_next = ret->sorting_prev = NULL;
 
   return ret;
 }
+
+/* iterates over every entry */
+#define FOR_EVERY_PROC_ENTRY(head, i)\
+  for(struct proc_entry *i = head; i; i = i->next)
+
+/* iterates over every entry, leaving the last entry at `last` */
+#define FOR_EVERY_PROC_ENTRY_LAST(head, i, last)\
+    for(struct proc_entry *i = head; i; last = i, i = i->next)
+
+/* iterates over every entry above the provided one */
+#define FOR_EVERY_PROC_ENTRY_ABOVE(node, i)\
+  FOR_EVERY_PROC_ENTRY(node->next, i)
+
+/* iterates over every entry below the provided one */
+#define FOR_EVERY_PROC_ENTRY_BELOW(node, i)\
+  for(struct proc_entry *i = node; i; i = i->prev)
+
+/* removes a node from the sorting data of the list */
+#define POP_SORTING_PROC_ENTRY(node)\
+  if(node->sorting_prev) node->sorting_prev->sorting_next = node->sorting_next;\
+  if(node->sorting_prev) node->sorting_next->sorting_prev = node->sorting_prev;
 
 struct proc_entry *append_proc_entry(struct proc_entry *node)
 {
@@ -89,19 +113,14 @@ struct proc_entry *append_proc_entry(struct proc_entry *node)
 
 inline void pop_proc_entry(struct proc_entry *node)
 {
-  /* removes a node from a double linked list */
+  /* removes a node */
   if(node->prev)
-  {
-    if(!node->next)
-      node->prev->next = NULL;
-    else
-      node->prev->next = node->next;
-  }
-  else if(node->next) // && !node->prev
-    node->next->prev = NULL;
+    node->prev->next = node->next;
+  if(node->next)
+    node->next->prev = node->prev;
 }
 
-int index_proc_entry(struct proc_entry *head)
+int index_proc_entries(struct proc_entry *head)
 {
   /* populates double linked list with index values */
   uint16_t ret = 0;
@@ -130,15 +149,17 @@ struct proc_entry *pop_proc_entry_idx(uint16_t idx, struct proc_entry *node)
   return NULL;
 }
 
-void free_proc_entry(struct proc_entry *node)
+void free_proc_entries(struct proc_entry *node)
 {
   /* frees double linked list
    * any node can be provided as an argument */
   struct proc_entry *i, *j;
   for(j = node, i = j->next; i; j = i, i = i->next)
     free(j);
+  free(j);
   for(j = node, i = j->prev; i; j = i, i = i->prev)
     free(j);
+  free(j);
   free(j);
 }
 
@@ -392,10 +413,142 @@ int populate_proc_data(struct proc_data *data, pid_t pid)
   return 0;
 }
 
+#define POPULATE_PROC_DATA(data, pid)\
+  (populate_proc_data_command(data, pid) >= 0\
+  && populate_proc_data_status(data, pid) >= 0\
+  && populate_proc_data_stat(data, pid)   >= 0)
+
+int init_proc_entries(struct proc_entry *out)
+{
+  /* creates and initializes a data structure of proc_entry
+   * -1 on error, the number of elements in the list on success
+   */
+  pid_t pid;
+  char *endptr;
+  struct proc_entry mock_head, *prev, *cur = &mock_head;
+  DIR *dfd = opendir("/proc");
+  if(!dfd)
+    return -1;
+
+  for(struct dirent *entry = readdir(dfd); entry; entry = readdir(dfd))
+  {
+    pid = strtol(entry->d_name, &endptr, 10);
+    if(endptr == entry->d_name)
+      continue;
+
+    prev = cur;
+    cur  = new_proc_entry();
+    cur->prev  = prev;
+    prev->next = cur;
+
+    if(populate_proc_data_command(cur->next_data, pid) < 0)
+      goto iter_skip;
+
+    if(populate_proc_data_status(cur->next_data, pid) < 0)
+      goto iter_skip;
+
+    if(populate_proc_data_stat(cur->next_data, pid) == 0)
+      continue;
+
+    iter_skip:
+    
+    free(cur);
+    cur = prev;
+    prev = cur->prev;
+  }
+
+  out = mock_head.next;
+
+  return index_proc_entries(out);
+
+err:
+  return -1;
+}
+
+int update_proc_entries(struct proc_entry *head)
+{
+  /* updates data in proc_entry data structure
+   * returns the number of processes on success, & -1 on error
+   */
+
+  pid_t pid;
+  int nr_pids = 0;
+  char *endptr;
+  struct proc_entry *last;
+  struct proc_data *cur_data;
+  DIR *dfd = opendir("/proc");
+  if(!dfd)
+  {
+    log_warn("failed to open /proc: %s", strerror(errno));
+    return -1;
+  }
+
+  FOR_EVERY_PROC_ENTRY(head, node)
+  {
+    node->sorting_prev = node->prev;
+    node->sorting_next = node->next;
+  }
+
+  for(struct dirent *entry = readdir(dfd); entry; entry = readdir(dfd))
+  {
+    pid = strtol(entry->d_name, &endptr, 10);
+    if(*endptr != '\0')
+      continue;
+
+    FOR_EVERY_PROC_ENTRY_LAST(head, node, last)
+    {
+      if(node->next_data->pid != pid)
+        continue;
+
+      cur_data = node->prev_data;
+      node->prev_data = node->next_data;
+      node->next_data = cur_data;
+
+      if(!POPULATE_PROC_DATA(cur_data, pid))
+      {
+        log_dbg3("failed to populate data for process %i, assuming dead", pid);
+        goto proc_died;
+      }
+
+      POP_SORTING_PROC_ENTRY(node);
+
+      goto next_search;
+
+      proc_died:
+
+      pop_proc_entry(node);
+      free(node);
+      nr_pids--;
+      goto next_search;
+    }
+
+    last->next = new_proc_entry();
+    last->next->prev = last;
+    last = last->next;
+    cur_data = last->next_data;
+    cur_data->pid = pid;
+
+    if(!POPULATE_PROC_DATA(cur_data, pid))
+    {
+      log_dbg3(
+          "attempted to add a new proc entry, but failed to populate it: %i",
+          pid);
+      pop_proc_entry(last);
+      free(last);
+    }
+    else
+      log_dbg3("new process added to proc entries: %i", pid);
+
+    next_search:
+    nr_pids++;
+  }
+  return nr_pids;
+}
+
 int generic_from_entries(struct proc_entry *head, struct limeade_proc_generic *out)
 {
   /* generates LIMEADE_PACKET_PROC_GENERIC from process data */
-
+  // TODO
   return 0;
 }
 
