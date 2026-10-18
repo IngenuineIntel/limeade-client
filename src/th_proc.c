@@ -5,8 +5,11 @@
 #include<pthread.h>
 #include<semaphore.h>
 #include<stdint.h>
+#include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
+#include<time.h>
+#include<unistd.h>
 
 #include<liblimeade/liblimeade.h>
 #include "logging.h"
@@ -110,7 +113,7 @@ struct proc_entry *append_proc_entry(struct proc_entry *node)
   return i->next;
 }
 
-inline void pop_proc_entry(struct proc_entry *node)
+inline static void pop_proc_entry(struct proc_entry *node)
 {
   /* removes a node */
   if(node->prev)
@@ -119,7 +122,7 @@ inline void pop_proc_entry(struct proc_entry *node)
     node->next->prev = node->prev;
 }
 
-void free_proc_entries(struct proc_entry *node)
+static void free_proc_entries(struct proc_entry *node)
 {
   /* frees double linked list
    * any node can be provided as an argument */
@@ -149,12 +152,13 @@ static const char PROC_THREAD_TARGET[]  = "Threads:";
   && memcmp(line_start, target, sizeof(target) - 1) == 0
 
 #define INT_CAST(dst, src)\
-  dst = strtol(src, &endptr, 10);\
-  if(endptr == src)\
   {\
-    log_dbg2("failed strtol (%02x instead of integer)", *src);\
-    return -1;\
-  }
+    dst = strtol(src, &endptr, 10);\
+    if(endptr == src)\
+    {\
+      log_dbg2("failed strtol in parsing (next character was %02x", *src);\
+      return -1;\
+    }}
 
 #define CHECK_AND_CAST_INT(indicator, match, dst, src)\
   if(!indicator && MATCH_COND(match))\
@@ -164,7 +168,7 @@ static const char PROC_THREAD_TARGET[]  = "Threads:";
     indicator = 1;\
   }
 
-int populate_proc_data_status(struct proc_data *data, pid_t pid)
+static int populate_proc_data_status(struct proc_data *data, pid_t pid)
 {
   /* populates from following values form /proc/pid/status into `data`:
    * state, ppid, *uid, *gid, vmsize, vmrss, rssfile, rssmem, & num_thread
@@ -216,26 +220,27 @@ int populate_proc_data_status(struct proc_data *data, pid_t pid)
     else CHECK_AND_CAST_INT(got_ppid, PROC_PPID_TARGET, data->ppid, idx)
     else if(!got_uids && MATCH_COND(PROC_UID_TARGET))
     {
+      data->ruid = data->euid = data->suid = data->fsuid = 6969;
       idx += sizeof(PROC_UID_TARGET);
       INT_CAST(data->ruid, idx);
-      endptr++;
-      INT_CAST(data->euid, endptr);
-      endptr++;
-      INT_CAST(data->suid, endptr);
-      endptr++;
-      INT_CAST(data->fsuid, endptr);
+      idx = endptr + 1;
+      INT_CAST(data->euid, idx);
+      idx = endptr + 1;
+      INT_CAST(data->suid, idx);
+      idx = endptr + 1;
+      INT_CAST(data->fsuid, idx);
       got_uids = 1;
     }
     else if(!got_gids && MATCH_COND(PROC_GID_TARGET))
     {
-      idx += sizeof(PROC_GID_TARGET);
+      idx += sizeof(PROC_GID_TARGET) - 1;
       INT_CAST(data->rgid, idx);
-      endptr++;
-      INT_CAST(data->egid, endptr);
-      endptr++;
-      INT_CAST(data->sgid, endptr);
-      endptr++;
-      INT_CAST(data->fsgid, endptr);
+      idx = endptr + 1;
+      INT_CAST(data->egid, idx);
+      idx = endptr + 1;
+      INT_CAST(data->sgid, idx);
+      idx = endptr + 1;
+      INT_CAST(data->fsgid, idx);
       got_gids = 1;
     }
     else CHECK_AND_CAST_INT(got_vmsize, PROC_VMSIZE_TARGET, data->vmsize, idx)
@@ -261,7 +266,7 @@ int populate_proc_data_status(struct proc_data *data, pid_t pid)
 #undef MATCH_COND
 #undef INT_CAST
 
-int stat_skip_vals(char **ptr, const char * const ptr_max, uint8_t nr_vals)
+static int stat_skip_vals(char **ptr, const char * const ptr_max, uint8_t nr_vals)
 {
   /* skips values when reading /proc/[PID]/stat 
    * returned -1 if the end of the file data is reached
@@ -284,7 +289,7 @@ int stat_skip_vals(char **ptr, const char * const ptr_max, uint8_t nr_vals)
   dst = strtoll(idx, &endptr, 10);\
   if(endptr == idx) return -1
 
-int populate_proc_data_stat(struct proc_data *data, pid_t pid)
+static int populate_proc_data_stat(struct proc_data *data, pid_t pid)
 {
   /* populates data with utime, stime, & starttime found in /proc/pid/stat
    * 0 on success, -1 on error */
@@ -331,7 +336,7 @@ int populate_proc_data_stat(struct proc_data *data, pid_t pid)
   return 0;
 }
 
-int populate_proc_data_command(struct proc_data *data, pid_t pid)
+static int populate_proc_data_command(struct proc_data *data, pid_t pid)
 {
   /* populates data->command from /proc/pid/comm & /proc/pid/cmdline
    * 0 on success, -1 on error
@@ -365,7 +370,7 @@ int populate_proc_data_command(struct proc_data *data, pid_t pid)
   return 0;
 }
 
-int populate_proc_data(struct proc_data *data, pid_t pid)
+static int populate_proc_data(struct proc_data *data, pid_t pid)
 {
   /* populates `data` via the /proc/`pid` directory listings
    * 0 on success, -1 on error
@@ -389,7 +394,7 @@ int populate_proc_data(struct proc_data *data, pid_t pid)
   && populate_proc_data_status(data, pid) >= 0\
   && populate_proc_data_stat(data, pid)   >= 0)
 
-int init_proc_entries(struct proc_entry *out)
+static int init_proc_entries(struct proc_entry *out)
 {
   /* creates and initializes a data structure of proc_entry
    * -1 on error, the number of elements in the list on success
@@ -438,7 +443,7 @@ err:
   return -1;
 }
 
-void populate_proc_entry_sorting_indexes(struct proc_entry *head)
+static void populate_proc_entry_sorting_indexes(struct proc_entry *head)
 {
   /* populates sorting indexes */
   FOR_EVERY_PROC_ENTRY(head, node)
@@ -448,7 +453,7 @@ void populate_proc_entry_sorting_indexes(struct proc_entry *head)
   }
 }
 
-int update_proc_entries(struct proc_entry *head)
+static int update_proc_entries(struct proc_entry *head)
 {
   /* updates data in proc_entry data structure
    * returns the number of processes on success, & -1 on error
@@ -516,14 +521,14 @@ int update_proc_entries(struct proc_entry *head)
   return nr_pids;
 }
 
-int generic_from_entries(struct proc_entry *head, struct limeade_proc_generic *out)
+static int generic_from_entries(struct proc_entry *head, struct limeade_proc_generic *out)
 {
   /* generates LIMEADE_PACKET_PROC_GENERIC from process data */
   // TODO
   return 0;
 }
 
-int dynamic_from_entries(struct proc_entry *head, struct limeade_proc_update *out)
+static int dynamic_from_entries(struct proc_entry *head, struct limeade_proc_update *out)
 {
   /* generates LIMEADE_PACKET_PROC_UPDATE from process data */
   // TODO
@@ -577,5 +582,45 @@ err:
 
   pthread_mutex_unlock(&glbl_data->mtx_events_err);
   return NULL;
+}
+
+int main(void)
+{
+  struct proc_entry *head = new_proc_entry(), *node;
+  int nr;
+
+  logging_init();
+  enable_really_verbose_logging();
+
+  printf("initializing proc table...\n");
+  nr = init_proc_entries(head);
+  printf("init_proc_entries() -> %d\n", nr);
+
+  head->data.pid = 1;
+  node = append_proc_entry(head);
+  node->data.pid = getpid();
+  populate_proc_data(&node->data, node->data.pid);
+  node = append_proc_entry(node);
+  node->data.pid = getppid();
+  populate_proc_data(&node->data, node->data.pid);
+
+  for(node = head; node; node = node->next)
+    if(node->data.pid)
+      printf("pid=%d ppid=%d state=%c threads=%u cmd=%s\n",
+          node->data.pid, node->data.ppid, node->data.state,
+          node->data.threads, node->data.command);
+
+  puts("pausing before update...");
+  sleep(1);
+
+  printf("update_proc_entries() -> %d\n", update_proc_entries(head));
+  for(node = head; node; node = node->next)
+    if(node->data.pid)
+      printf("pid=%d ppid=%d state=%c threads=%u cmd=%s\n",
+          node->data.pid, node->data.ppid, node->data.state,
+          node->data.threads, node->data.command);
+
+  free_proc_entries(head);
+  return 0;
 }
 
