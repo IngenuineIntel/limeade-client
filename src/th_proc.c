@@ -80,7 +80,7 @@ struct proc_entry
   struct proc_data data;
 };
 
-struct proc_entry *new_proc_entry(void)
+static struct proc_entry *new_proc_entry(void)
 {
   struct proc_entry *ret = malloc(sizeof(*ret));
   memset(ret, 0, sizeof(*ret));
@@ -109,7 +109,7 @@ struct proc_entry *new_proc_entry(void)
   if(node->sorting_prev) node->sorting_prev->sorting_next = node->sorting_next;\
   if(node->sorting_next) node->sorting_next->sorting_prev = node->sorting_prev;
 
-struct proc_entry *append_proc_entry(struct proc_entry *node)
+static struct proc_entry *append_proc_entry(struct proc_entry *node)
 {
   /* appends an entry to the end of a list of `proc_entry`s.
    * takes any node of the list as an argument
@@ -122,7 +122,7 @@ struct proc_entry *append_proc_entry(struct proc_entry *node)
   return i->next;
 }
 
-inline static void pop_proc_entry(struct proc_entry *node)
+static inline void pop_proc_entry(struct proc_entry *node)
 {
   /* removes a node */
   if(node->prev)
@@ -558,18 +558,18 @@ struct proc_tbl_head
   int incr_inc;
 };
 
-struct limeade_indiv_proc *proc_tbl_init(void)
+static struct limeade_indiv_proc *proc_tbl_init(void)
 {
   /* initializes indiv_proc dynamic array */
   struct proc_tbl_head *ret;
-  ret = malloc(sizeof(*ret) + sizeof(struct limeade_indiv_proc) * PREDICTED_PROC_NR);
+  ret = malloc(sizeof(*ret) + sizeof(struct limeade_indiv_proc) * PREDICTED_PROC_NR + PREDICTION_LINEAR_BIAS);
   ret->count    = 0;
-  ret->capacity = 0;
+  ret->capacity = PREDICTED_PROC_NR + PREDICTION_LINEAR_BIAS;
   ret->incr_inc = PREDICTED_PROC_NR / 2;
   return (struct limeade_indiv_proc*)(ret + 1);
 }
 
-inline struct limeade_indiv_proc *proc_tbl_append(struct limeade_indiv_proc **tbl)
+static inline struct limeade_indiv_proc *proc_tbl_append(struct limeade_indiv_proc **tbl)
 {
   /* returns pointer to next element of indiv_proc_dynamic array */
   struct proc_tbl_head *metadata = ((typeof(metadata))*tbl - 1);
@@ -595,7 +595,7 @@ inline struct limeade_indiv_proc *proc_tbl_append(struct limeade_indiv_proc **tb
 
 /* updates dynamic array size prediction */
 #define UPDATE_TBL_SZ_PREDICT(t)\
-  PREDICTED_PROC_NR = ((PREDICTED_PROC_NR + proc_tbl_sz(t)) / 2) + PREDICTION_LINEAR_BIAS
+  PREDICTED_PROC_NR = ((PREDICTED_PROC_NR + proc_tbl_sz(t)) / 2)
 
 #define DELTA_FROM_NODE(node, attr)\
   (node->data.new.attr - node->data.prev.attr)
@@ -606,44 +606,63 @@ static int generic_from_entries(struct proc_entry *head, struct limeade_proc_gen
    * note: the strings pointed to by the packet structure are the ones in the
    * linked list; they are not copied */
   
+  log_dbg3("initializing proc table...");
   int64_t d_starttime, d_utime, d_stime;
   PROC_TBL_INIT(t);
   struct limeade_indiv_proc *cur;
 
+  log_dbg3("collecting timestamp...");
   {
     struct timespec rn;
     clock_gettime(CLOCK_REALTIME, &rn);
 
     out->ts_s  = rn.tv_sec;
-    out->ts_ms = rn.tv_nsec / 1000000;
+    out->ts_ms = rn.tv_nsec > 0 ? rn.tv_nsec / 1000000 : 0;
   }
 
+  struct timespec a, b, c, d, e, f;
+
+  clock_gettime(CLOCK_MONOTONIC, &a);
   FOR_EVERY_PROC_ENTRY(head, node)
   {
+    clock_gettime(CLOCK_MONOTONIC, &b);
+
+    log_info("Time to dereference: %lluns", b.tv_nsec - a.tv_nsec);
+
+    clock_gettime(CLOCK_MONOTONIC, &c);
     cur = proc_tbl_append(&t);
+    clock_gettime(CLOCK_MONOTONIC, &d);
 
     // implied SIMD
     *((struct constant_proc_data*)cur) = node->data.constant;
+    clock_gettime(CLOCK_MONOTONIC, &e);
+
+    log_info("Time to append: %lluns", d.tv_nsec - c.tv_nsec);
+    log_info("Tiem to SIMD:   %lluns", e.tv_nsec - d.tv_nsec);
 
     d_starttime = DELTA_FROM_NODE(node, starttime);
     d_utime     = DELTA_FROM_NODE(node, utime);
     d_stime     = DELTA_FROM_NODE(node, stime);
 
-    if(d_starttime <= 0) // maybe a time change would cause this?
+    if(!d_starttime) // there hasn't been enough time since last iteration
     {
-      log_dbg2(
-          "timestamp delta came back negative, skipping CPU stats for process %i",
-          cur->pid);
+      cur->cpu_user = node->data.prev.utime;
+      cur->cpu_sys  = node->data.prev.stime;
+    } else if(d_starttime < 0) // maybe a time change would cause this?
       continue;
+    else
+    {
+      cur->cpu_user = d_utime > 0 ? (d_utime * 100) / (d_starttime * 100) : 0;
+      cur->cpu_sys  = d_stime > 0 ? (d_stime * 100) / (d_starttime * 100) : 0;
     }
-    
-    cur->cpu_user = d_utime > 0 ? (d_utime * 100) / (d_starttime * 100) : 0;
-    cur->cpu_sys  = d_stime > 0 ? (d_stime * 100) / (d_starttime * 100) : 0;
+
+    clock_gettime(CLOCK_MONOTONIC, &a);
   }
 
   out->procs = t;
   out->total = proc_tbl_sz(t);
 
+  //log_dbg3("updating prediction");
   UPDATE_TBL_SZ_PREDICT(t);
 
   return 0;
@@ -706,7 +725,7 @@ err:
 int main(void)
 {
   struct timespec init_start, init_stop, populate_start, populate_stop;
-  struct timespec print_start, print_stop, iter_start, iter_stop;
+  struct timespec print_start, print_stop, iter_start, iter_stop, gen_start, gen_stop;
   struct proc_entry *head;
   int nr;
 
@@ -728,7 +747,6 @@ int main(void)
   nr = update_proc_entries(head);
   clock_gettime(CLOCK_MONOTONIC, &populate_stop);
 
-
   clock_gettime(CLOCK_MONOTONIC, &print_start);
   FOR_EVERY_PROC_ENTRY(head, node)
   {
@@ -738,9 +756,22 @@ int main(void)
   }
   clock_gettime(CLOCK_MONOTONIC, &print_stop);
 
+  {
+    clock_gettime(CLOCK_MONOTONIC, &gen_start);
+    
+    struct limeade_proc_generic pkt;
+    nr = generic_from_entries(head, &pkt);
+
+    clock_gettime(CLOCK_MONOTONIC, &gen_stop);
+  
+    proc_tbl_free(pkt.procs);
+  }
+
+
   log_info("init took %lluus", (init_stop.tv_nsec - init_start.tv_nsec)/1000);
   log_info("update took %llums", (populate_stop.tv_nsec - populate_start.tv_nsec)/1000000);
   log_info("printing took %lluus", (print_stop.tv_nsec - print_start.tv_nsec)/1000);
+  log_info("generation took %lluus", (gen_stop.tv_nsec - gen_start.tv_nsec)/1000);
 
   uint64_t total_procs = 0;
 
