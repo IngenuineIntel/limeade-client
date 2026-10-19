@@ -50,10 +50,8 @@ struct proc_data
     uint64_t stime;
   } new;
 
-  uint32_t vmsize;
-  uint32_t vmrss;
-  uint32_t rssfile;
-  uint32_t rssmem;
+  uint32_t ram_kb;
+  uint32_t swap_kb;
 
   char state;
   char name[32];
@@ -139,9 +137,7 @@ static const char PROC_PPID_TARGET[]    = "PPid:";
 static const char PROC_UID_TARGET[]     = "Uid:";
 static const char PROC_GID_TARGET[]     = "Gid:";
 static const char PROC_VMSIZE_TARGET[]  = "VmSize:";
-static const char PROC_VMRSS_TARGET[]   = "VmRSS:";
-static const char PROC_RSSFILE_TARGET[] = "RssFile:";
-static const char PROC_RSSMEM_TARGET[]  = "RssShmem:";
+static const char PROC_VMSWAP_TARGET[]  = "VmSwap:";
 static const char PROC_THREAD_TARGET[]  = "Threads:";
 
 #define MATCH_COND(target)\
@@ -176,11 +172,9 @@ static int populate_proc_data_status(struct proc_data *data, pid_t pid)
   char path[25];
   char *line_start, *line_end, *idx, *endptr;
   int amt, rem, line_len;
-  uint8_t got_state, got_ppid, got_uids, got_gids, got_vmsize;
-  uint8_t got_vmrss, got_rssfile, got_rssmem, got_threads;
-
-  got_state = got_ppid = got_uids = got_gids = got_vmsize = 0;
-  got_vmrss = got_rssfile = got_rssmem = got_threads = 0;
+  uint8_t got_state, got_ppid, got_uids, got_gids, got_ram, got_swap, got_threads;
+  got_state = got_ppid = got_uids = got_gids = got_ram = \
+  got_swap = got_threads = 0;
 
   snprintf(path, sizeof(path), "/proc/%i/status", pid);
   fd = fopen(path, "r");
@@ -223,7 +217,6 @@ static int populate_proc_data_status(struct proc_data *data, pid_t pid)
     else CHECK_AND_CAST_INT(got_ppid, PROC_PPID_TARGET, data->ppid, idx)
     else if(!got_uids && MATCH_COND(PROC_UID_TARGET))
     {
-      data->ruid = data->euid = data->suid = data->fsuid = 6969;
       idx += sizeof(PROC_UID_TARGET);
       INT_CAST(data->ruid, idx);
       idx = endptr + 1;
@@ -246,18 +239,15 @@ static int populate_proc_data_status(struct proc_data *data, pid_t pid)
       INT_CAST(data->fsgid, idx);
       got_gids = 1;
     }
-    else CHECK_AND_CAST_INT(got_vmsize, PROC_VMSIZE_TARGET, data->vmsize, idx)
-    else CHECK_AND_CAST_INT(got_vmrss, PROC_VMRSS_TARGET, data->vmrss, idx)
-    else CHECK_AND_CAST_INT(got_rssfile, PROC_RSSFILE_TARGET, data->rssfile, idx)
-    else CHECK_AND_CAST_INT(got_rssmem, PROC_RSSMEM_TARGET, data->rssmem, idx)
+    else CHECK_AND_CAST_INT(got_ram, PROC_VMSIZE_TARGET, data->ram_kb, idx)
+    else CHECK_AND_CAST_INT(got_swap, PROC_VMSWAP_TARGET, data->swap_kb, idx)
     else CHECK_AND_CAST_INT(got_threads, PROC_THREAD_TARGET, data->threads, idx)
     else
       goto next;
 
     // checks are in reverse order to how they're expected to be read to attempt
     // to limit unecessary checks
-    if(got_threads && got_rssmem && got_rssfile && got_vmrss
-    && got_vmsize  && got_gids   && got_uids    && got_state)
+    if(got_threads && got_ram && got_gids  && got_uids && got_state)
       return 0;
 
     next:
@@ -269,6 +259,7 @@ static int populate_proc_data_status(struct proc_data *data, pid_t pid)
 
 #undef MATCH_COND
 #undef INT_CAST
+#undef CHECK_AND_CAST_INT
 
 static int stat_skip_vals(char **ptr, const char * const ptr_max, uint8_t nr_vals)
 {
@@ -338,6 +329,9 @@ static int populate_proc_data_stat(struct proc_data *data, pid_t pid)
 
   return 0;
 }
+
+#undef CAST
+#undef SKIP
 
 static int populate_proc_data_name(struct proc_data *data, pid_t pid)
 {
@@ -539,19 +533,131 @@ static int update_proc_entries(struct proc_entry *head)
   return nr_pids;
 }
 
+// predicted number of processes that need to be allocated for
+// changes over time to be more accurate
+static int PREDICTED_PROC_NR = 300;
+
+// a constant grace buffer for the prediction
+static const int PREDICTION_LINEAR_BIAS = 50;
+
+struct proc_tbl_head
+{
+  /* metadata for indiv_proc hashtable */
+  int count;
+  int capacity;
+  int incr_inc;
+};
+
+struct limeade_indiv_proc *proc_tbl_init(void)
+{
+  /* initializes indiv_proc hashtable */
+  struct proc_tbl_head *ret;
+  ret = malloc(sizeof(*ret) + sizeof(struct limeade_indiv_proc) * PREDICTED_PROC_NR);
+  ret->count    = 0;
+  ret->capacity = 0;
+  ret->incr_inc = PREDICTED_PROC_NR / 2;
+  return (struct limeade_indiv_proc*)(ret + 1);
+}
+
+inline struct limeade_indiv_proc *proc_tbl_append(struct limeade_indiv_proc **tbl)
+{
+  /* returns pointer to next element of indiv_proc_hashtable */
+  struct proc_tbl_head *metadata = ((typeof(metadata))*tbl - 1);
+  metadata->count++;
+  if(metadata->count > metadata->capacity)
+  {
+    metadata = realloc(metadata, sizeof(**tbl) * (metadata->count + metadata->incr_inc)
+                               + sizeof(*metadata));
+    metadata->capacity += metadata->incr_inc;
+    *tbl = (typeof(*tbl))(metadata + 1);
+  }
+  return *tbl + metadata->count;
+}
+
+/* creates hashtable */
+#define PROC_TBL_INIT(t) struct limeade_indiv_proc *t = proc_tbl_init()
+
+/* gets hashtable size */
+#define proc_tbl_sz(tbl)   (((struct proc_tbl_head*)tbl - 1)->count)
+
+/* frees hashtable */
+#define proc_tbl_free(tbl) (free((struct proc_tbl_head*)tbl - 1))
+
+/* updates hashtable size prediction */
+#define UPDATE_TBL_SZ_PREDICT(t)\
+  PREDICTED_PROC_NR = ((PREDICTED_PROC_NR + proc_tbl_sz(t)) / 2) + PREDICTION_LINEAR_BIAS
+
+#define CP_ATTR(node, indiv, attr)\
+  indiv->attr = node->data.attr
+
+#define DELTA_FROM_NODE(node, attr)\
+  (node->data.new.attr - node->data.prev.attr)
+
 static int generic_from_entries(struct proc_entry *head, struct limeade_proc_generic *out)
 {
-  /* generates LIMEADE_PACKET_PROC_GENERIC from process data */
-  // TODO
+  /* generates LIMEADE_PACKET_PROC_GENERIC from process data
+   * note: the strings pointed to by the packet structure are the ones in the
+   * linked list; they are not copied */
+  
+  int64_t d_starttime, d_utime, d_stime;
+  PROC_TBL_INIT(t);
+  struct limeade_indiv_proc *cur;
+
+  {
+    struct timespec rn;
+    clock_gettime(CLOCK_REALTIME, &rn);
+
+    out->ts_s  = rn.tv_sec;
+    out->ts_ms = rn.tv_nsec / 1000000;
+  }
+
+  FOR_EVERY_PROC_ENTRY(head, node)
+  {
+    cur = proc_tbl_append(&t);
+    CP_ATTR(node, cur, pid);
+    CP_ATTR(node, cur, ppid);
+    CP_ATTR(node, cur, ruid);
+    CP_ATTR(node, cur, euid);
+    CP_ATTR(node, cur, suid);
+    CP_ATTR(node, cur, fsuid);
+    CP_ATTR(node, cur, rgid);
+    CP_ATTR(node, cur, egid);
+    CP_ATTR(node, cur, sgid);
+    CP_ATTR(node, cur, fsgid);
+    CP_ATTR(node, cur, threads);
+    CP_ATTR(node, cur, name);
+    CP_ATTR(node, cur, command);
+    CP_ATTR(node, cur, ram_kb);
+    CP_ATTR(node, cur, swap_kb);
+
+    d_starttime = DELTA_FROM_NODE(node, starttime);
+    d_utime     = DELTA_FROM_NODE(node, utime);
+    d_stime     = DELTA_FROM_NODE(node, stime);
+
+    if(d_starttime <= 0) // maybe a time change would cause this?
+    {
+      log_dbg2(
+          "timestamp delta came back negative, skipping CPU stats for process %i",
+          cur->pid);
+      continue;
+    }
+    
+    cur->cpu_user = d_utime > 0 ? (d_utime * 100) / (d_starttime * 100) : 0;
+    cur->cpu_sys  = d_stime > 0 ? (d_stime * 100) / (d_starttime * 100) : 0;
+  }
+
+  out->procs = t;
+  out->total = proc_tbl_sz(t);
+
+  UPDATE_TBL_SZ_PREDICT(t);
+
   return 0;
 }
 
-static int dynamic_from_entries(struct proc_entry *head, struct limeade_proc_update *out)
-{
-  /* generates LIMEADE_PACKET_PROC_UPDATE from process data */
-  // TODO
-  return 0;
-}
+#undef CP_ATTR
+#undef DELTA_FROM_NODE
+
+#define generic_release(p) proc_tbl_free(out->procs)
 
 void *th_proc(struct thread_pass *glbl_data)
 {
@@ -568,7 +674,8 @@ void *th_proc(struct thread_pass *glbl_data)
     clock_gettime(CLOCK_MONOTONIC, &iter_start);
 
     // TODO stuff
-
+    
+    
     
     iter_end:
 
@@ -587,7 +694,7 @@ void *th_proc(struct thread_pass *glbl_data)
     if(real_wait.tv_sec < 0 || real_wait.tv_sec < 0)
     {
       log_warn(
-          "process thread took longer than the allocated time (%llins when the goal was %llins",
+          "process thread took longer than the allocated time (%llins when the goal was %llins)",
           ((int64_t)diff.tv_sec)      * 999999999 + diff.tv_nsec,
           ((int64_t)goal_wait.tv_sec) * 999999999 + goal_wait.tv_nsec);
       continue;
