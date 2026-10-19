@@ -15,12 +15,13 @@
 #include "logging.h"
 #include "thread_pass.h"
 
-struct proc_data
+struct constant_proc_data
 {
-  /* data about a certain process in its purest form
-   * much of this data has to be processed in order to ascertain useful data
-   * from it
-   */
+  /* data about a certain process that isn't prone to change
+   * note: this structure mimicks the order of data in `limeade_indiv_proc` so
+   * that data can be copied with a struct assignment that, on most systems,
+   * implicitly uses SIMD operations */
+
   pid_t pid;
   pid_t ppid;
 
@@ -35,6 +36,19 @@ struct proc_data
   gid_t fsgid;
 
   uint32_t threads;
+  uint32_t ram_kb;
+  uint32_t swap_kb;
+  char state;
+};
+
+struct proc_data
+{
+  /* data about a certain process in its purest form
+   * much of this data has to be processed in order to ascertain useful data
+   * from it
+   */
+
+  struct constant_proc_data constant;
 
   struct
   {
@@ -50,10 +64,6 @@ struct proc_data
     uint64_t stime;
   } new;
 
-  uint32_t ram_kb;
-  uint32_t swap_kb;
-
-  char state;
   char name[32];
   char command[72];
 };
@@ -211,37 +221,37 @@ static int populate_proc_data_status(struct proc_data *data, pid_t pid)
     if(!got_state && MATCH_COND(PROC_STATE_TARGET))
     {
       idx += sizeof(PROC_STATE_TARGET);
-      data->state = *idx;
+      data->constant.state = *idx;
       got_state = 1;
     }
-    else CHECK_AND_CAST_INT(got_ppid, PROC_PPID_TARGET, data->ppid, idx)
+    else CHECK_AND_CAST_INT(got_ppid, PROC_PPID_TARGET, data->constant.ppid, idx)
     else if(!got_uids && MATCH_COND(PROC_UID_TARGET))
     {
       idx += sizeof(PROC_UID_TARGET);
-      INT_CAST(data->ruid, idx);
+      INT_CAST(data->constant.ruid, idx);
       idx = endptr + 1;
-      INT_CAST(data->euid, idx);
+      INT_CAST(data->constant.euid, idx);
       idx = endptr + 1;
-      INT_CAST(data->suid, idx);
+      INT_CAST(data->constant.suid, idx);
       idx = endptr + 1;
-      INT_CAST(data->fsuid, idx);
+      INT_CAST(data->constant.fsuid, idx);
       got_uids = 1;
     }
     else if(!got_gids && MATCH_COND(PROC_GID_TARGET))
     {
       idx += sizeof(PROC_GID_TARGET) - 1;
-      INT_CAST(data->rgid, idx);
+      INT_CAST(data->constant.rgid, idx);
       idx = endptr + 1;
-      INT_CAST(data->egid, idx);
+      INT_CAST(data->constant.egid, idx);
       idx = endptr + 1;
-      INT_CAST(data->sgid, idx);
+      INT_CAST(data->constant.sgid, idx);
       idx = endptr + 1;
-      INT_CAST(data->fsgid, idx);
+      INT_CAST(data->constant.fsgid, idx);
       got_gids = 1;
     }
-    else CHECK_AND_CAST_INT(got_ram, PROC_VMSIZE_TARGET, data->ram_kb, idx)
-    else CHECK_AND_CAST_INT(got_swap, PROC_VMSWAP_TARGET, data->swap_kb, idx)
-    else CHECK_AND_CAST_INT(got_threads, PROC_THREAD_TARGET, data->threads, idx)
+    else CHECK_AND_CAST_INT(got_ram, PROC_VMSIZE_TARGET, data->constant.ram_kb, idx)
+    else CHECK_AND_CAST_INT(got_swap, PROC_VMSWAP_TARGET, data->constant.swap_kb, idx)
+    else CHECK_AND_CAST_INT(got_threads, PROC_THREAD_TARGET, data->constant.threads, idx)
     else
       goto next;
 
@@ -444,7 +454,7 @@ static int init_proc_entries(struct proc_entry **out)
     cur  = new_proc_entry();
     cur->prev  = prev;
     prev->next = cur;
-    cur->data.pid = pid;
+    cur->data.constant.pid = pid;
 
     if(populate_proc_data(&cur->data, pid) >= 0)
       continue;
@@ -491,7 +501,7 @@ static int update_proc_entries(struct proc_entry *head)
 
     FOR_EVERY_PROC_ENTRY_PREDEF(head, node)
     {
-      if(node->data.pid != pid)
+      if(node->data.constant.pid != pid)
         continue;
 
       if(populate_proc_data(&node->data, pid) < 0)
@@ -542,7 +552,7 @@ static const int PREDICTION_LINEAR_BIAS = 50;
 
 struct proc_tbl_head
 {
-  /* metadata for indiv_proc hashtable */
+  /* metadata for indiv_proc dynamic array */
   int count;
   int capacity;
   int incr_inc;
@@ -550,7 +560,7 @@ struct proc_tbl_head
 
 struct limeade_indiv_proc *proc_tbl_init(void)
 {
-  /* initializes indiv_proc hashtable */
+  /* initializes indiv_proc dynamic array */
   struct proc_tbl_head *ret;
   ret = malloc(sizeof(*ret) + sizeof(struct limeade_indiv_proc) * PREDICTED_PROC_NR);
   ret->count    = 0;
@@ -561,7 +571,7 @@ struct limeade_indiv_proc *proc_tbl_init(void)
 
 inline struct limeade_indiv_proc *proc_tbl_append(struct limeade_indiv_proc **tbl)
 {
-  /* returns pointer to next element of indiv_proc_hashtable */
+  /* returns pointer to next element of indiv_proc_dynamic array */
   struct proc_tbl_head *metadata = ((typeof(metadata))*tbl - 1);
   metadata->count++;
   if(metadata->count > metadata->capacity)
@@ -574,21 +584,18 @@ inline struct limeade_indiv_proc *proc_tbl_append(struct limeade_indiv_proc **tb
   return *tbl + metadata->count;
 }
 
-/* creates hashtable */
+/* creates dynamic array */
 #define PROC_TBL_INIT(t) struct limeade_indiv_proc *t = proc_tbl_init()
 
-/* gets hashtable size */
+/* gets dynamic array size */
 #define proc_tbl_sz(tbl)   (((struct proc_tbl_head*)tbl - 1)->count)
 
-/* frees hashtable */
+/* frees dynamic array */
 #define proc_tbl_free(tbl) (free((struct proc_tbl_head*)tbl - 1))
 
-/* updates hashtable size prediction */
+/* updates dynamic array size prediction */
 #define UPDATE_TBL_SZ_PREDICT(t)\
   PREDICTED_PROC_NR = ((PREDICTED_PROC_NR + proc_tbl_sz(t)) / 2) + PREDICTION_LINEAR_BIAS
-
-#define CP_ATTR(node, indiv, attr)\
-  indiv->attr = node->data.attr
 
 #define DELTA_FROM_NODE(node, attr)\
   (node->data.new.attr - node->data.prev.attr)
@@ -614,21 +621,9 @@ static int generic_from_entries(struct proc_entry *head, struct limeade_proc_gen
   FOR_EVERY_PROC_ENTRY(head, node)
   {
     cur = proc_tbl_append(&t);
-    CP_ATTR(node, cur, pid);
-    CP_ATTR(node, cur, ppid);
-    CP_ATTR(node, cur, ruid);
-    CP_ATTR(node, cur, euid);
-    CP_ATTR(node, cur, suid);
-    CP_ATTR(node, cur, fsuid);
-    CP_ATTR(node, cur, rgid);
-    CP_ATTR(node, cur, egid);
-    CP_ATTR(node, cur, sgid);
-    CP_ATTR(node, cur, fsgid);
-    CP_ATTR(node, cur, threads);
-    CP_ATTR(node, cur, name);
-    CP_ATTR(node, cur, command);
-    CP_ATTR(node, cur, ram_kb);
-    CP_ATTR(node, cur, swap_kb);
+
+    // implied SIMD
+    *((struct constant_proc_data*)cur) = node->data.constant;
 
     d_starttime = DELTA_FROM_NODE(node, starttime);
     d_utime     = DELTA_FROM_NODE(node, utime);
@@ -654,7 +649,6 @@ static int generic_from_entries(struct proc_entry *head, struct limeade_proc_gen
   return 0;
 }
 
-#undef CP_ATTR
 #undef DELTA_FROM_NODE
 
 #define generic_release(p) proc_tbl_free(out->procs)
@@ -739,8 +733,8 @@ int main(void)
   FOR_EVERY_PROC_ENTRY(head, node)
   {
     log_dbg("pid=%d ppid=%d state=%c threads=%u utime=%llu stime=%llu cmd=%s",
-        node->data.pid, node->data.ppid, node->data.state,
-        node->data.threads, node->data.new.utime, node->data.new.stime, node->data.command);
+        node->data.constant.pid, node->data.constant.ppid, node->data.constant.state,
+        node->data.constant.threads, node->data.new.utime, node->data.new.stime, node->data.command);
   }
   clock_gettime(CLOCK_MONOTONIC, &print_stop);
 
