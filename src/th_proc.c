@@ -92,6 +92,9 @@ static struct proc_entry *new_proc_entry(void)
 #define FOR_EVERY_PROC_ENTRY(head, i)\
   for(struct proc_entry *i = head; i; i = i->next)
 
+#define FOR_EVERY_PROC_ENTRY_SORTING_PREDEF(head, i)\
+  for(i = head; i; i = i->sorting_next)
+
 /* iterates over every entry with a declared variable */
 #define FOR_EVERY_PROC_ENTRY_PREDEF(head, i)\
     for(i = head; i; i = i->next)
@@ -375,7 +378,7 @@ static int populate_proc_data_command(struct proc_data *data, pid_t pid)
   FILE *fd;
   int len = 0;
 
-  snprintf(path, sizeof(path), "/proc/%i/comm", pid);
+  snprintf(path, sizeof(path), "/proc/%i/cmdline", pid);
 
   fd = fopen(path, "r");
   if(!fd)
@@ -486,7 +489,6 @@ static int update_proc_entries(struct proc_entry *head)
   if(!dfd)
     return -1;
 
-  log_dbg3("preparing sorting links");
   FOR_EVERY_PROC_ENTRY(head, node)
   {
     tail = node;
@@ -500,16 +502,13 @@ static int update_proc_entries(struct proc_entry *head)
     if(*endptr != '\0')
       continue;
 
-    FOR_EVERY_PROC_ENTRY_PREDEF(head, node)
+    FOR_EVERY_PROC_ENTRY_SORTING_PREDEF(head, node)
     {
       if(node->data.constant.pid != pid)
         continue;
 
       if(populate_proc_data(&node->data, pid) < 0)
-      {
-        log_dbg3("failed to populate data for process %i, assuming dead", pid);
         goto proc_died;
-      }
 
       POP_SORTING_PROC_ENTRY(node);
 
@@ -519,9 +518,7 @@ static int update_proc_entries(struct proc_entry *head)
 
       log_dbg3("%p", node);
       pop_proc_entry(node);
-      log_dbg3("survived popping");
       free(node);
-      log_dbg3("survived freeing");
       nr_pids--;
 
       goto next_search;
@@ -608,12 +605,10 @@ static int generic_from_entries(struct proc_entry *head, struct limeade_proc_gen
    * note: the strings pointed to by the packet structure are the ones in the
    * linked list; they are not copied */
   
-  log_dbg3("initializing proc table...");
   int64_t d_starttime, d_utime, d_stime;
   PROC_TBL_INIT(t);
   struct limeade_indiv_proc *cur;
 
-  log_dbg3("collecting timestamp...");
   {
     struct timespec rn;
     clock_gettime(CLOCK_REALTIME, &rn);
@@ -622,25 +617,13 @@ static int generic_from_entries(struct proc_entry *head, struct limeade_proc_gen
     out->ts_ms = rn.tv_nsec > 0 ? rn.tv_nsec / 1000000 : 0;
   }
 
-  struct timespec a, b, c, d, e;
-
-  clock_gettime(CLOCK_MONOTONIC, &a);
   FOR_EVERY_PROC_ENTRY(head, node)
   {
-    clock_gettime(CLOCK_MONOTONIC, &b);
 
-    log_info("Time to dereference: %lluns", b.tv_nsec - a.tv_nsec);
-
-    clock_gettime(CLOCK_MONOTONIC, &c);
     cur = proc_tbl_append(&t);
-    clock_gettime(CLOCK_MONOTONIC, &d);
 
     // implied SIMD
     *((struct constant_proc_data*)cur) = node->data.constant;
-    clock_gettime(CLOCK_MONOTONIC, &e);
-
-    log_info("Time to append: %lluns", d.tv_nsec - c.tv_nsec);
-    log_info("Tiem to SIMD:   %lluns", e.tv_nsec - d.tv_nsec);
 
     d_starttime = DELTA_FROM_NODE(node, starttime);
     d_utime     = DELTA_FROM_NODE(node, utime);
@@ -657,8 +640,6 @@ static int generic_from_entries(struct proc_entry *head, struct limeade_proc_gen
       cur->cpu_user = d_utime > 0 ? (d_utime * 100) / (d_starttime * 100) : 0;
       cur->cpu_sys  = d_stime > 0 ? (d_stime * 100) / (d_starttime * 100) : 0;
     }
-
-    clock_gettime(CLOCK_MONOTONIC, &a);
   }
 
   out->procs = t;
@@ -770,10 +751,11 @@ int main(void)
   }
 
 
-  log_info("init took %lluus", (init_stop.tv_nsec - init_start.tv_nsec)/1000);
-  log_info("update took %llums", (populate_stop.tv_nsec - populate_start.tv_nsec)/1000000);
-  log_info("printing took %lluus", (print_stop.tv_nsec - print_start.tv_nsec)/1000);
-  log_info("generation took %lluus", (gen_stop.tv_nsec - gen_start.tv_nsec)/1000);
+  log_info("");
+  log_info("init took       %llums", (init_stop.tv_nsec - init_start.tv_nsec)/1000000);
+  log_info("update took     %llums", (populate_stop.tv_nsec - populate_start.tv_nsec)/1000000);
+  log_info("printing took   %llums", (print_stop.tv_nsec - print_start.tv_nsec)/1000000);
+  log_info("generation took %llums", (gen_stop.tv_nsec - gen_start.tv_nsec)/1000000);
 
   uint64_t total_procs = 0;
 
