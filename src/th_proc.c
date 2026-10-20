@@ -480,7 +480,7 @@ static int update_proc_entries(struct proc_entry *head)
   pid_t pid;
   int nr_pids = 0;
   char *endptr;
-  struct proc_entry *node;
+  struct proc_entry *node, *tail;
 
   DIR *dfd = opendir("/proc");
   if(!dfd)
@@ -489,6 +489,7 @@ static int update_proc_entries(struct proc_entry *head)
   log_dbg3("preparing sorting links");
   FOR_EVERY_PROC_ENTRY(head, node)
   {
+    tail = node;
     node->sorting_prev = node->prev;
     node->sorting_next = node->next;
   }
@@ -526,15 +527,16 @@ static int update_proc_entries(struct proc_entry *head)
       goto next_search;
     }
 
-    node = append_proc_entry(head);
+    // note
+    tail = append_proc_entry(tail);
 
-    if(populate_proc_data(&node->data, pid) < 0)
+    if(populate_proc_data(&tail->data, pid) < 0)
     {
       log_dbg3(
           "attempted to add a new proc entry, but failed to populate it: %i",
           pid);
-      pop_proc_entry(node);
-      free(node);
+      pop_proc_entry(tail);
+      free(tail);
     }
 
     next_search:
@@ -595,7 +597,7 @@ static inline struct limeade_indiv_proc *proc_tbl_append(struct limeade_indiv_pr
 
 /* updates dynamic array size prediction */
 #define UPDATE_TBL_SZ_PREDICT(t)\
-  PREDICTED_PROC_NR = ((PREDICTED_PROC_NR + proc_tbl_sz(t)) / 2)
+  PREDICTED_PROC_NR = ((PREDICTED_PROC_NR - PREDICTION_LINEAR_BIAS + proc_tbl_sz(t)) / 2)
 
 #define DELTA_FROM_NODE(node, attr)\
   (node->data.new.attr - node->data.prev.attr)
@@ -620,7 +622,7 @@ static int generic_from_entries(struct proc_entry *head, struct limeade_proc_gen
     out->ts_ms = rn.tv_nsec > 0 ? rn.tv_nsec / 1000000 : 0;
   }
 
-  struct timespec a, b, c, d, e, f;
+  struct timespec a, b, c, d, e;
 
   clock_gettime(CLOCK_MONOTONIC, &a);
   FOR_EVERY_PROC_ENTRY(head, node)
