@@ -448,7 +448,7 @@ static int init_proc_entries(struct proc_entry **out)
   if(!dfd)
     return -1;
 
-  for(struct dirent *entry = readdir(dfd); entry; entry = readdir(dfd), ret++)
+  for(struct dirent *entry = readdir(dfd); entry; entry = readdir(dfd))
   {
     pid = strtol(entry->d_name, &endptr, 10);
     if(endptr == entry->d_name)
@@ -461,14 +461,16 @@ static int init_proc_entries(struct proc_entry **out)
     cur->data.constant.pid = pid;
 
     if(populate_proc_data(&cur->data, pid) >= 0)
+    {
+      ret++;
       continue;
+    }
 
     iter_skip:
     
     free(cur);
     cur = prev;
     prev = cur->prev;
-    ret--;
   }
 
   *out = mock_head.next;

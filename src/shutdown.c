@@ -32,3 +32,6 @@ void proc_shutdown(pid_t target)
   }
 }
 
+#define start_shutdown_proc(target)\
+  if(!fork()) proc_shutdown(target)
+
