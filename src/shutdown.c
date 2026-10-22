@@ -7,7 +7,7 @@
 #include<time.h>
 #include<unistd.h>
 
-#include "module.c"
+#include "module.h"
 
 // frequency of operation
 // hardcoded because it doesn't really matter
@@ -26,7 +26,7 @@ void proc_shutdown(pid_t target)
 
     if(kill(target, 0) != 0 && errno == ESRCH)
     {
-      // TODO unload module
+      unload_lce();
       exit(0);
     }
   }

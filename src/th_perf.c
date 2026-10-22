@@ -107,9 +107,12 @@ void *th_perf(struct thread_pass *data)
   return NULL;
 }
 
+
+/*
 int main()
 {
   // TODO
   return 0;
 }
+*/
 

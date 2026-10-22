@@ -734,6 +734,7 @@ err:
   return NULL;
 }
 
+/*
 int main(void)
 {
   struct timespec init_start, init_stop, populate_start, populate_stop;
@@ -803,4 +804,4 @@ int main(void)
 
   return 0;
 }
-
+*/

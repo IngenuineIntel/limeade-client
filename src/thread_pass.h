@@ -7,8 +7,6 @@
 
 #include<liblimeade/liblimeade.h>
 
-#pragma once
-
 // all sending threads need a single data structure through which to communicate
 // this is that structure
 struct thread_pass

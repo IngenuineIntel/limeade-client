@@ -19,6 +19,7 @@ const char *NETWORK_MODE_REPRS[] = {
   "SSH",
 };
 
+// TODO replace Hz with ms(p) for better control
 struct prog_config
 {
   enum network_mode net_mode;
@@ -159,6 +160,7 @@ int serialize_config(const struct prog_config *config)
 
 }
 
+// TODO offload functionality to functions & macros, this shit's unreadable
 int deserialize_config(struct prog_config *out)
 {
   /* Reads config from configuration file
@@ -167,7 +169,7 @@ int deserialize_config(struct prog_config *out)
   char data[512];
 
   void *line_start, *equals, *line_end, *val_start, *val_end;
-  int amt_rem, line_len, val_len, have_started_section = 0, have_stopped_section = 0;
+  int amt_rem, line_len, have_started_section = 0, have_stopped_section = 0;
 
   out->net_mode  = NETWORK_MODE_NEITHER;
   out->host      = NULL;
@@ -249,7 +251,9 @@ int deserialize_config(struct prog_config *out)
         if(memcmp(val_start, NETWORK_MODE_REPRS[i], strlen(NETWORK_MODE_REPRS[i])) == 0)
           out->net_mode = i;
 
-      if(out->net_mode == NETWORK_MODE_NEITHER)
+      if(out->net_mode == 3)
+        log_dbg3("failed to parse network mode");
+      else if(out->net_mode == NETWORK_MODE_NEITHER)
         log_dbg3("network mode ('%s') parsed as invalid", CONFIG_TARGET_NET_MODE);
       else
         log_dbg3("network mode ('%s') parsed as '%s'", CONFIG_TARGET_NET_MODE, NETWORK_MODE_REPRS[out->net_mode]);
@@ -350,9 +354,16 @@ int deserialize_config(struct prog_config *out)
 }
 
 #define CONF_SET_ATTR_DEFAULT(attr)\
-{\
-  config->attr = DEFAULT_CONFIG.attr;\
-  ret++;\
+  do\
+  { config->attr = DEFAULT_CONFIG.attr; }\
+  while(0)
+
+void process_argv_into_conf(char **argv)
+{
+  /* overwrites current config data with any/all data taken via commandline
+   * arguments
+   */
+  // TODO
 }
 
 void release_config(struct prog_config *config)
@@ -369,6 +380,7 @@ void release_config_path(void)
 
 #define SERIALIZE_DEFAULT_CONFIG() serialize_config(&DEFAULT_CONFIG)
 
+/*
 int main()
 {
   logging_init();
@@ -379,4 +391,5 @@ int main()
   log_info("deserialize returned %i", ret);
   
 }
+*/
 
