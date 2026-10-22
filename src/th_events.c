@@ -123,8 +123,8 @@ void *th_events(struct thread_pass * const glbl_data)
 
   pkt.events = events;
   
-  goal_wait.tv_sec  = 0;
-  goal_wait.tv_nsec = 999999999/glbl_data->event_hz;
+  goal_wait.tv_sec  = glbl_data->event_ms_p / 1000;
+  goal_wait.tv_nsec = glbl_data->event_ms_p % 1000 * 1000000;
 
   FILE *fd = fopen(glbl_data->procfile, "r");
   if(!fd)

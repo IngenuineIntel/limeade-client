@@ -17,7 +17,7 @@ struct thread_pass
   sem_t sem_shutdown; // semaphore for shutting down threads
   sem_t sem_ready;    // semaphore for holding the initialization of the
                       // threads
-  int event_hz, proc_hz, perf_hz; // thread interation frequency
+  int event_ms_p, proc_ms_p, perf_ms_p; // thread iteration frequency (ms(p))
   
   // the main thread will lock all of these before startings the threads, then
   // release them when it is ready

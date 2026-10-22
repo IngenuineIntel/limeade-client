@@ -14,6 +14,7 @@
 #include<liblimeade/liblimeade.h>
 #include "logging.h"
 #include "thread_pass.h"
+#define log_dbg(...) do{}while(0)
 
 struct constant_proc_data
 {
@@ -624,6 +625,7 @@ static int generic_from_entries(struct proc_entry *head, struct limeade_proc_gen
 
     // implied SIMD
     *((struct constant_proc_data*)cur) = node->data.constant;
+    cur->command = node->data.command;
 
     d_starttime = DELTA_FROM_NODE(node, starttime);
     d_utime     = DELTA_FROM_NODE(node, utime);
@@ -655,23 +657,51 @@ static int generic_from_entries(struct proc_entry *head, struct limeade_proc_gen
 
 #define generic_release(p) proc_tbl_free(out->procs)
 
-void *th_proc(struct thread_pass *glbl_data)
+void *th_proc(struct thread_pass * const glbl_data)
 {
   struct timespec goal_wait, iter_start, iter_end, diff, real_wait;
+  struct proc_entry *head;
+  struct limeade_proc_generic pkt;
+  int ret;
 
-  goal_wait.tv_sec  = 0;
-  goal_wait.tv_nsec = 999999999/glbl_data->proc_hz;
+  goal_wait.tv_sec  = glbl_data->proc_ms_p / 1000;
+  goal_wait.tv_nsec = glbl_data->proc_ms_p % 1000 * 1000000;
+
+  ret = init_proc_entries(&head);
+  if(ret < 0)
+  {
+    log_crit("`init_proc_entries` returned an error, quitting proc thread");
+    goto err;
+  }
+  else log_dbg("number of processes at first glance: %i", ret);
 
   pthread_mutex_lock(&glbl_data->mtx_proc_err);
   log_dbg("th_proc ready");
   sem_wait(&glbl_data->sem_ready);
+
+  nanosleep(&goal_wait, &diff);
+
   while(sem_trywait(&glbl_data->sem_shutdown) != 0 && errno == EAGAIN)
   {
     clock_gettime(CLOCK_MONOTONIC, &iter_start);
 
-    // TODO stuff
-    
-    
+    ret = update_proc_entries(head);
+    if(ret < 0)
+    {
+      log_crit("failed to update proc entries, quitting proc thread");
+      goto err;
+    }
+
+    ret = generic_from_entries(head, &pkt);
+    if(ret < 0)
+    {
+      log_crit("failed to generate packet from proc entries, quitting proc thread");
+      goto err;
+    }
+
+    ret = limeade_send_await(&glbl_data->lctx, LIMEADE_PACKET_PROC_GENERIC, &pkt);
+    if(ret != LIMEADE_OK)
+      log_crit("failed to send proc_generic packet: %s", LIMEADE_ERROR_REPRS[ret]);
     
     iter_end:
 
@@ -700,8 +730,7 @@ void *th_proc(struct thread_pass *glbl_data)
   }
   
 err:
-
-  pthread_mutex_unlock(&glbl_data->mtx_events_err);
+  pthread_mutex_unlock(&glbl_data->mtx_proc_err);
   return NULL;
 }
 
