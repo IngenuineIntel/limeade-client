@@ -25,3 +25,5 @@ struct thread_pass
   const char *procfile; // path to LCE output
 };
 
+void thread_recv_sig(int signal);
+

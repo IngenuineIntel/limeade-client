@@ -11,6 +11,7 @@
 #define LCE_PROCFILE "/proc/lce"
 
 static struct thread_pass GLOBAL_STORE;
+static struct prog_config CONFIG;
 #define GLBL GLOBAL_STORE
 
 int populate_global_store(void)
@@ -28,8 +29,17 @@ int populate_global_store(void)
   return 0;
 }
 
+int start_threads(void)
+{
+}
+
+void stop_threads(void)
+{}
+
+
 int main(int argc, char **argv)
 {
+  populate_conf(&CONFIG, argc, argv);
   return 0;
 }
 

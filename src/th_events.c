@@ -3,6 +3,7 @@
 #include<errno.h>
 #include<limits.h>
 #include<semaphore.h>
+#include<signal.h>
 #include<stdlib.h>
 #include<string.h>
 #include<time.h>
@@ -115,11 +116,14 @@ premature_end:
 
 void *th_events(struct thread_pass * const glbl_data)
 {
+
   struct timespec goal_wait, iter_start, iter_end, diff, real_wait;
   struct limeade_events pkt;
   int amt, ret;
   struct limeade_indiv_event * const events = malloc(128 * sizeof(struct limeade_indiv_event));
   void * const buffer = malloc(65536);
+
+  signal(SIGUSR1, thread_recv_sig);
 
   pkt.events = events;
   

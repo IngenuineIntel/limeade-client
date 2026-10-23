@@ -4,6 +4,7 @@
 #include<dirent.h>
 #include<pthread.h>
 #include<semaphore.h>
+#include<signal.h>
 #include<stdint.h>
 #include<stdio.h>
 #include<stdlib.h>
@@ -657,7 +658,9 @@ static int generic_from_entries(struct proc_entry *head, struct limeade_proc_gen
 
 #undef DELTA_FROM_NODE
 
-#define generic_release(p) proc_tbl_free(out->procs)
+#define generic_release(p) proc_tbl_free(p->procs)
+
+
 
 void *th_proc(struct thread_pass * const glbl_data)
 {
@@ -665,6 +668,8 @@ void *th_proc(struct thread_pass * const glbl_data)
   struct proc_entry *head;
   struct limeade_proc_generic pkt;
   int ret;
+
+  signal(SIGUSR1, thread_recv_sig);
 
   goal_wait.tv_sec  = glbl_data->proc_ms_p / 1000;
   goal_wait.tv_nsec = glbl_data->proc_ms_p % 1000 * 1000000;

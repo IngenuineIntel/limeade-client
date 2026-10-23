@@ -1,5 +1,6 @@
 // th_perf.c
 
+#include<signal.h>
 #include<stdlib.h>
 #include<string.h>
 
@@ -103,6 +104,7 @@ int8_t cpu_usage_from_stat(struct statinfo *start, struct statinfo *end, uint32_
 
 void *th_perf(struct thread_pass *data)
 {
+  signal(SIGUSR1, thread_recv_sig);
   // TODO
   return NULL;
 }
