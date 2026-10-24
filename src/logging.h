@@ -5,9 +5,12 @@
 #include<stdbool.h>
 #include<stdio.h>
 
+// FIXME this interface makes no sense
+
 void set_log_level(int level);
 void logging_set_colors(bool choice);
 void set_logging_output(FILE **choice);
+void set_logging_file(const char * const path);
 char *logging_stdout_timestamp(void);
 char *logging_file_timestamp(void);
 void log_dbg(const char *msg, ...);
@@ -19,6 +22,7 @@ void log_warn(const char *msg, ...);
 void log_crit(const char *msg, ...);
 void log_err(const char *msg, ...);
 
+#define LOGGING_INIT(out) set_logging_file(out)
 #define logging_init() logging_set_colors(true)
 #define enable_logging() set_log_level(2)
 #define enable_verbose_logging() set_log_level(3)

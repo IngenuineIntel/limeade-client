@@ -15,7 +15,6 @@
 #include<liblimeade/liblimeade.h>
 #include "logging.h"
 #include "thread_pass.h"
-#define log_dbg(...) do{}while(0)
 
 struct constant_proc_data
 {
@@ -662,8 +661,9 @@ static int generic_from_entries(struct proc_entry *head, struct limeade_proc_gen
 
 
 
-void *th_proc(struct thread_pass * const glbl_data)
+void *th_proc(void *data)
 {
+  struct thread_pass * const glbl_data = data;
   struct timespec goal_wait, iter_start, iter_end, diff, real_wait;
   struct proc_entry *head;
   struct limeade_proc_generic pkt;

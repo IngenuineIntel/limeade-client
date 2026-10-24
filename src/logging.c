@@ -72,12 +72,32 @@ void logging_set_colors(bool choice)
   }
 }
 
+void set_logging_file(const char * const path)
+{
+  if(!path)
+  {
+    logging_output = &stdout;
+    logging_set_colors(true);
+  } else
+  {
+    if(!(*logging_output = fopen(path, "a")))
+      return set_logging_file(NULL);
+    logging_set_colors(false);
+  }
+}
+
 void set_logging_output(FILE **choice)
 {
   if(!choice)
+  {
     logging_output = &stdout;
+    logging_set_colors(true);
+  }
   else
+  {
     logging_output = choice;
+    logging_set_colors(false);
+  }
 }
 
 

@@ -114,19 +114,16 @@ premature_end:
   return nr_parsed;
 }
 
-void *th_events(struct thread_pass * const glbl_data)
+void *th_events(void *data)
 {
+  struct thread_pass * const glbl_data = data;
 
   struct timespec goal_wait, iter_start, iter_end, diff, real_wait;
   struct limeade_events pkt;
   int amt, ret;
-  struct limeade_indiv_event * const events = malloc(128 * sizeof(struct limeade_indiv_event));
-  void * const buffer = malloc(65536);
 
   signal(SIGUSR1, thread_recv_sig);
 
-  pkt.events = events;
-  
   goal_wait.tv_sec  = glbl_data->event_ms_p / 1000;
   goal_wait.tv_nsec = glbl_data->event_ms_p % 1000 * 1000000;
 
@@ -140,6 +137,12 @@ void *th_events(struct thread_pass * const glbl_data)
   pthread_mutex_lock(&glbl_data->mtx_events_err);
   log_dbg("th_events ready");
   sem_wait(&glbl_data->sem_ready);
+
+  struct limeade_indiv_event * const events = malloc(128 * sizeof(struct limeade_indiv_event));
+  void * const buffer = malloc(65536);
+
+  pkt.events = events;
+
   while(sem_trywait(&glbl_data->sem_shutdown) != 0 && errno == EAGAIN)
   {
     clock_gettime(CLOCK_MONOTONIC, &iter_start);
