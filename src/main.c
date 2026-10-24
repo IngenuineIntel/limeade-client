@@ -152,6 +152,8 @@ int main(int argc, char **argv)
     return 1;
   }
 
+  if(limeade_connect(&GLBL.
+
   STOP_CLOCK();
 
   log_dbg("startup completed in %ius", MEASURE_CLOCK());

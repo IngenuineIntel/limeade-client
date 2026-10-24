@@ -19,11 +19,13 @@ struct thread_pass
   
   // the main thread will lock all of these before startings the threads, then
   // release them when it is ready
-  pthread_mutex_t mtx_events_err; // locked by the events thread on fatal error
-  pthread_mutex_t mtx_proc_err;   // locked by the proc thread on fatal error
-  pthread_mutex_t mtx_perf_err;   // locked by the perf thread on fatal error
+  pthread_mutex_t mtx_events_err; // unlocked by the events thread on fatal error
+  pthread_mutex_t mtx_proc_err;   // unlocked by the proc thread on fatal error
+  pthread_mutex_t mtx_perf_err;   // unlocked by the perf thread on fatal error
+  pthread_mutex_t mtx_handle_err; // unlocked by the handle thread on fatal error
   const char *procfile; // path to LCE output
 };
 
-void thread_recv_sig(int signal);
+void thread_recv_sig(int signal)
+{}
 

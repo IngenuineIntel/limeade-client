@@ -96,6 +96,9 @@ static struct proc_entry *new_proc_entry(void)
 #define FOR_EVERY_PROC_ENTRY_SORTING_PREDEF(head, i)\
   for(i = head; i; i = i->sorting_next)
 
+#define FOR_EVERY_PROC_ENTRY_SORTING(head, i)\
+  for(struct proc_entry *i = head; i; i = i->sorting_next)
+
 /* iterates over every entry with a declared variable */
 #define FOR_EVERY_PROC_ENTRY_PREDEF(head, i)\
     for(i = head; i; i = i->next)
@@ -486,17 +489,16 @@ static int update_proc_entries(struct proc_entry *head)
   pid_t pid;
   int nr_pids = 0;
   char *endptr;
-  struct proc_entry *node, *tail;
+  struct proc_entry *tail;
 
   DIR *dfd = opendir("/proc");
   if(!dfd)
     return -1;
 
-  FOR_EVERY_PROC_ENTRY(head, node)
+  FOR_EVERY_PROC_ENTRY_PREDEF(head, tail)
   {
-    tail = node;
-    node->sorting_prev = node->prev;
-    node->sorting_next = node->next;
+    tail->sorting_prev = tail->prev;
+    tail->sorting_next = tail->next;
   }
 
   for(struct dirent *entry = readdir(dfd); entry; entry = readdir(dfd))
@@ -505,29 +507,34 @@ static int update_proc_entries(struct proc_entry *head)
     if(*endptr != '\0')
       continue;
 
-    FOR_EVERY_PROC_ENTRY_SORTING_PREDEF(head, node)
+    FOR_EVERY_PROC_ENTRY_SORTING(head, node)
     {
       if(node->data.constant.pid != pid)
         continue;
 
       if(populate_proc_data(&node->data, pid) < 0)
         goto proc_died;
+      else nr_pids++;
 
       POP_SORTING_PROC_ENTRY(node);
 
-      goto next_search;
+      goto proc_cont;
 
       proc_died:
 
       log_dbg3("%p", node);
       pop_proc_entry(node);
       free(node);
-      nr_pids--;
 
-      goto next_search;
+      goto proc_cont;
     }
+    
+    goto new_proc;
 
-    // note
+proc_cont:
+    continue;
+
+new_proc:
     tail = append_proc_entry(tail);
 
     if(populate_proc_data(&tail->data, pid) < 0)
@@ -537,10 +544,7 @@ static int update_proc_entries(struct proc_entry *head)
           pid);
       pop_proc_entry(tail);
       free(tail);
-    }
-
-    next_search:
-    nr_pids++;
+    } else nr_pids++;
   }
   return nr_pids;
 }
@@ -741,7 +745,6 @@ err:
   return NULL;
 }
 
-/*
 int main(void)
 {
   struct timespec init_start, init_stop, populate_start, populate_stop;
@@ -811,4 +814,3 @@ int main(void)
 
   return 0;
 }
-*/
