@@ -106,6 +106,12 @@ int check_threads(void)
   return 0;
 }
 
+void wait_for_something_to_happen(void)
+{
+  /* waits for something to happen */
+  // TODO
+}
+
 unsigned int us_from_ts(struct timespec *ts_start, struct timespec *ts_stop)
 {
 
@@ -143,7 +149,7 @@ int main(int argc, char **argv)
   log_info("LIMEADE CLIENT v%s", VERSION);
   log_info("Created by %s under the AGPLv3 license", MAINTAINER);
   log_info("");
-  log_dbg("starting up...");
+  log_dbg("Starting up...");
   
   START_CLOCK();
 
@@ -186,22 +192,29 @@ int main(int argc, char **argv)
       ret = 1;
       goto undo_startup;
     }
-    if((ret = limeade_send_await(&GLBL.lctx, LIMEADE_PACKET_INTRO, introduction)) != LIMEADE_OK)
+    if((ret = limeade_send_await(&GLBL.lctx, LIMEADE_PACKET_INTRO, *introduction)) != LIMEADE_OK)
     {
       log_crit("Failed to send introduction: %s", LIMEADE_ERROR_REPRS[ret]);
+      release_introduction(introduction);
       ret = 1;
       goto undo_startup;
     }
+    release_introduction(introduction);
   }
   
   STOP_CLOCK();
 
-  log_dbg("startup completed in %ius", MEASURE_CLOCK());
+  log_dbg("Startup completed in %ius", MEASURE_CLOCK());
 
   start_threads();
 
-  // TODO
+  START_CLOCK();
 
+  wait_for_something_to_happen();
+
+  STOP_CLOCK();
+
+  log_info("Ran for %ius", MEASURE_CLOCK());
 
   ret = 0;
 

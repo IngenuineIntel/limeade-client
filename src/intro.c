@@ -264,6 +264,11 @@ struct limeade_intro *generate_introduction(void)
   return NULL;
 }
 
+void release_introduction(struct limeade_intro *introduction)
+{
+  // TODO
+}
+
 /*
 int main()
 {

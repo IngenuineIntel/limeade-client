@@ -16,6 +16,8 @@
 #include "logging.h"
 #include "thread_pass.h"
 
+// FIXME a hashtable instead of a double-double linked list would be faster
+
 struct constant_proc_data
 {
   /* data about a certain process that isn't prone to change
