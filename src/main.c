@@ -12,9 +12,10 @@
 #include "thread_pass.h"
 
 #include "config.c"
-#include "shutdown.c"
+#include "intro.c"
 #include "user_env.c"
 
+#include "shutdown.c"
 #include "th_events.c"
 #include "th_handle.c"
 #include "th_perf.c"
@@ -169,7 +170,29 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  // TODO connect to server
+  if((ret = limeade_connect(&GLBL.lctx)) != LIMEADE_OK)
+  {
+    log_crit("Failed to connect to server: %s", LIMEADE_ERROR_REPRS[ret]);
+    ret = 1;
+    goto undo_startup;
+  }
+
+  {
+    struct limeade_intro *introduction;
+
+    if(!(introduction = generate_introduction()))
+    {
+      log_crit("Failed to generate introduction");
+      ret = 1;
+      goto undo_startup;
+    }
+    if((ret = limeade_send_await(&GLBL.lctx, LIMEADE_PACKET_INTRO, introduction)) != LIMEADE_OK)
+    {
+      log_crit("Failed to send introduction: %s", LIMEADE_ERROR_REPRS[ret]);
+      ret = 1;
+      goto undo_startup;
+    }
+  }
   
   STOP_CLOCK();
 
@@ -179,7 +202,13 @@ int main(int argc, char **argv)
 
   // TODO
 
-  return 0;
+
+  ret = 0;
+
+undo_startup:
+  stop_threads();
+  depopulate_global_store();
+  return ret;
 }
 
 

@@ -4,6 +4,8 @@
 #include<stdlib.h>
 #include<string.h>
 
+#include <liblimeade/liblimeade.h>
+
 #include "logging.h"
 
 int get_os_release(char **out)
@@ -256,6 +258,13 @@ int get_cpu_info(struct cpu_info *out)
 
 }
 
+struct limeade_intro *generate_introduction(void)
+{
+  // TODO
+  return NULL;
+}
+
+/*
 int main()
 {
   int ret;
@@ -286,4 +295,5 @@ int main()
 
 
 }
+*/
 
