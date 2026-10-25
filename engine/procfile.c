@@ -41,6 +41,7 @@ static void arg_sanatize(char *s)
       *i = ' ';
 }
 
+// TODO I think partial lines can be output, which is bad
 ssize_t lce_proc_read(struct file *file, char __user *ubuf, size_t count,
                              loff_t *ppos)
 {
