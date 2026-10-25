@@ -110,9 +110,9 @@ unsigned int us_from_ts(struct timespec *ts_start, struct timespec *ts_stop)
   return (s * 1000000) + (ns / 1000);
 }
 
-#define INIT_CLOCK() struct timespec ts_start, ts_stop
-#define START_CLOCK() clock_gettime(CLOCK_MONOTONIC, &ts_start)
-#define STOP_CLOCK()  clock_gettime(CLOCK_MONOTONIC, &ts_stop)
+#define INIT_CLOCK()    struct timespec ts_start, ts_stop
+#define START_CLOCK()   clock_gettime(CLOCK_MONOTONIC, &ts_start)
+#define STOP_CLOCK()    clock_gettime(CLOCK_MONOTONIC, &ts_stop)
 #define MEASURE_CLOCK() us_from_ts(&ts_start, &ts_stop)
 
 int main(int argc, char **argv)
@@ -127,7 +127,7 @@ int main(int argc, char **argv)
   set_log_level(CONFIG.log_level);
 
   log_info("LIMEADE CLIENT v%s", VERSION);
-  log_info("Created by %s under the AGPLv3 license");
+  log_info("Created by %s under the AGPLv3 license", MAINTAINER);
   log_info("");
   log_dbg("starting up...");
   
