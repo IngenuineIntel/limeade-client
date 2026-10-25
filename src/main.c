@@ -16,6 +16,7 @@
 #include "th_events.c"
 #include "th_perf.c"
 #include "th_proc.c"
+#include "user_env.c"
 
 #define LCE_PROCFILE "/proc/lce"
 
@@ -89,6 +90,7 @@ void stop_threads(void)
 int check_threads(void)
 {
   // TODO make sure all threads & processes are alive
+  return 0;
 }
 
 unsigned int us_from_ts(struct timespec *ts_start, struct timespec *ts_stop)
@@ -115,6 +117,8 @@ unsigned int us_from_ts(struct timespec *ts_start, struct timespec *ts_stop)
 
 int main(int argc, char **argv)
 {
+  if(confirm_system_configuration() < 0)
+    return 1;
   int ret;
   INIT_CLOCK();
 
@@ -152,8 +156,8 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  if(limeade_connect(&GLBL.
-
+  // TODO connect to server
+  
   STOP_CLOCK();
 
   log_dbg("startup completed in %ius", MEASURE_CLOCK());

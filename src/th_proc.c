@@ -745,6 +745,7 @@ err:
   return NULL;
 }
 
+/*
 int main(void)
 {
   struct timespec init_start, init_stop, populate_start, populate_stop;
@@ -814,3 +815,24 @@ int main(void)
 
   return 0;
 }
+*/
+
+#undef FOR_EVERY_PROC_ENTRY
+#undef FOR_EVERY_PROC_ENTRY_SORTING_PREDEF
+#undef FOR_EVERY_PROC_ENTRY_SORTING
+#undef FOR_EVERY_PROC_ENTRY_PREDEF
+#undef FOR_EVERY_PROC_ENTRY_ABOVE
+#undef FOR_EVERY_PROC_ENTRY_BELOW
+#undef POP_SORTING_PROC_ENTRY
+#undef MATCH_COND
+#undef INT_CAST
+#undef CHECK_AND_CAST_INT
+#undef SKIP
+#undef CAST
+#undef PROC_TBL_INIT
+#undef proc_tbl_sz
+#undef proc_tbl_free
+#undef UPDATE_TBL_SZ_PREDICT
+#undef DELTA_FROM_NODE
+#undef generic_release
+
