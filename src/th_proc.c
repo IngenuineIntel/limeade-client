@@ -665,9 +665,8 @@ static int generic_from_entries(struct proc_entry *head, struct limeade_proc_gen
 
 
 
-void *th_proc(void *data)
+void *th_proc(struct thread_pass * const glbl)
 {
-  struct thread_pass * const glbl_data = data;
   struct timespec goal_wait, iter_start, iter_end, diff, real_wait;
   struct proc_entry *head;
   struct limeade_proc_generic pkt;
@@ -675,8 +674,8 @@ void *th_proc(void *data)
 
   signal(SIGUSR1, thread_recv_sig);
 
-  goal_wait.tv_sec  = glbl_data->proc_ms_p / 1000;
-  goal_wait.tv_nsec = glbl_data->proc_ms_p % 1000 * 1000000;
+  goal_wait.tv_sec  = glbl->proc_ms_p / 1000;
+  goal_wait.tv_nsec = glbl->proc_ms_p % 1000 * 1000000;
 
   ret = init_proc_entries(&head);
   if(ret < 0)
@@ -686,13 +685,13 @@ void *th_proc(void *data)
   }
   else log_dbg("number of processes at first glance: %i", ret);
 
-  pthread_mutex_lock(&glbl_data->mtx_proc_err);
+  pthread_mutex_lock(&glbl->mtx_proc_err);
   log_dbg("th_proc ready");
-  sem_wait(&glbl_data->sem_ready);
+  sem_wait(&glbl->sem_ready);
 
   nanosleep(&goal_wait, &diff);
 
-  while(sem_trywait(&glbl_data->sem_shutdown) != 0 && errno == EAGAIN)
+  while(sem_trywait(&glbl->sem_shutdown) != 0 && errno == EAGAIN)
   {
     clock_gettime(CLOCK_MONOTONIC, &iter_start);
 
@@ -710,7 +709,7 @@ void *th_proc(void *data)
       goto err;
     }
 
-    ret = limeade_send_await(&glbl_data->lctx, LIMEADE_PACKET_PROC_GENERIC, &pkt);
+    ret = limeade_send_await(&glbl->lctx, LIMEADE_PACKET_PROC_GENERIC, &pkt);
     if(ret != LIMEADE_OK)
       log_crit("failed to send proc_generic packet: %s", LIMEADE_ERROR_REPRS[ret]);
     
@@ -731,7 +730,7 @@ void *th_proc(void *data)
     if(real_wait.tv_sec < 0 || real_wait.tv_sec < 0)
     {
       log_warn(
-          "process thread took longer than the allocated time (%llins when the goal was %llins)",
+          "process thread took longer than the allocated time (%lins when the goal was %lins)",
           ((int64_t)diff.tv_sec)      * 999999999 + diff.tv_nsec,
           ((int64_t)goal_wait.tv_sec) * 999999999 + goal_wait.tv_nsec);
       continue;
@@ -741,7 +740,7 @@ void *th_proc(void *data)
   }
   
 err:
-  pthread_mutex_unlock(&glbl_data->mtx_proc_err);
+  pthread_mutex_unlock(&glbl->mtx_proc_err);
   return NULL;
 }
 

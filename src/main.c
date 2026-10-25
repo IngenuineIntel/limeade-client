@@ -13,10 +13,13 @@
 
 #include "config.c"
 #include "shutdown.c"
+#include "user_env.c"
+
 #include "th_events.c"
+#include "th_handle.c"
 #include "th_perf.c"
 #include "th_proc.c"
-#include "user_env.c"
+
 
 #define LCE_PROCFILE "/proc/lce"
 
@@ -34,6 +37,7 @@ enum limeade_error populate_global_store()
   pthread_mutex_init(&GLBL.mtx_events_err, NULL);
   pthread_mutex_init(&GLBL.mtx_proc_err, NULL);
   pthread_mutex_init(&GLBL.mtx_perf_err, NULL);
+  pthread_mutex_init(&GLBL.mtx_handle_err, NULL);
   sem_init(&GLBL.sem_shutdown, 1, 0);
   sem_init(&GLBL.sem_ready, 1, 0);
   sem_wait(&GLBL.sem_ready);
@@ -46,31 +50,39 @@ void depopulate_global_store(void)
   pthread_mutex_destroy(&GLBL.mtx_events_err);
   pthread_mutex_destroy(&GLBL.mtx_proc_err);
   pthread_mutex_destroy(&GLBL.mtx_perf_err);
+  pthread_mutex_destroy(&GLBL.mtx_handle_err);
   sem_post(&GLBL.sem_shutdown);
   sem_post(&GLBL.sem_ready);
   sem_destroy(&GLBL.sem_shutdown);
   sem_destroy(&GLBL.sem_ready);
 }
 
-static pthread_t TH_TIDS[3];
+static pthread_t TH_TIDS[4];
 #define TH_EVENTS_TID TH_TIDS[0]
 #define TH_PROC_TID   TH_TIDS[1]
 #define TH_PERF_TID   TH_TIDS[2]
+#define TH_HANDLE_TID TH_TIDS[3]
 
 int init_threads(void)
 {
-  if(pthread_create(&TH_EVENTS_TID, NULL, th_events, &GLBL) != 0)
+  if(pthread_create(&TH_EVENTS_TID, NULL, (void*(*)(void*))th_events, &GLBL) != 0)
     return -1;
-  if(pthread_create(&TH_PROC_TID, NULL, th_proc, &GLBL) != 0)
+  if(pthread_create(&TH_PROC_TID, NULL, (void*(*)(void*))th_proc, &GLBL) != 0)
   {
     pthread_kill(TH_EVENTS_TID, SIGKILL);
     return -1;
   }
-  if(pthread_create(&TH_PERF_TID, NULL, th_perf, &GLBL) != 0)
+  if(pthread_create(&TH_PERF_TID, NULL, (void*(*)(void*))th_perf, &GLBL) != 0)
   {
-    pthread_kill(TH_EVENTS_TID, SIGKILL);
     pthread_kill(TH_PROC_TID, SIGKILL);
+    pthread_kill(TH_EVENTS_TID, SIGKILL);
     return -1;
+  }
+  if(pthread_create(&TH_HANDLE_TID, NULL, (void*(*)(void*))th_handle, &GLBL) != 0)
+  {
+    pthread_kill(TH_PERF_TID, SIGKILL);
+    pthread_kill(TH_PROC_TID, SIGKILL);
+    pthread_kill(TH_EVENTS_TID, SIGKILL);
   }
   start_shutdown_proc(getpid());
   return 0;
@@ -119,6 +131,7 @@ int main(int argc, char **argv)
 {
   if(confirm_system_configuration() < 0)
     return 1;
+
   int ret;
   INIT_CLOCK();
 

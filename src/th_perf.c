@@ -102,9 +102,8 @@ int8_t cpu_usage_from_stat(struct statinfo *start, struct statinfo *end, uint32_
   return 0;
 }
 
-void *th_perf(void *data)
+void *th_perf(struct thread_pass * const glbl)
 {
-  struct thread_pass * const glbl_data = data;
   signal(SIGUSR1, thread_recv_sig);
   // TODO
   return NULL;

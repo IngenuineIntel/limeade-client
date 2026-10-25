@@ -114,36 +114,34 @@ premature_end:
   return nr_parsed;
 }
 
-void *th_events(void *data)
+void *th_events(struct thread_pass * const glbl)
 {
-  struct thread_pass * const glbl_data = data;
-
   struct timespec goal_wait, iter_start, iter_end, diff, real_wait;
   struct limeade_events pkt;
   int amt, ret;
 
   signal(SIGUSR1, thread_recv_sig);
 
-  goal_wait.tv_sec  = glbl_data->event_ms_p / 1000;
-  goal_wait.tv_nsec = glbl_data->event_ms_p % 1000 * 1000000;
+  goal_wait.tv_sec  = glbl->event_ms_p / 1000;
+  goal_wait.tv_nsec = glbl->event_ms_p % 1000 * 1000000;
 
-  FILE *fd = fopen(glbl_data->procfile, "r");
+  FILE *fd = fopen(glbl->procfile, "r");
   if(!fd)
   {
-    log_err("failed to open %s: %s", glbl_data->procfile, strerror(errno));
+    log_err("failed to open %s: %s", glbl->procfile, strerror(errno));
     return NULL;
   }
 
-  pthread_mutex_lock(&glbl_data->mtx_events_err);
+  pthread_mutex_lock(&glbl->mtx_events_err);
   log_dbg("th_events ready");
-  sem_wait(&glbl_data->sem_ready);
+  sem_wait(&glbl->sem_ready);
 
   struct limeade_indiv_event * const events = malloc(128 * sizeof(struct limeade_indiv_event));
   void * const buffer = malloc(65536);
 
   pkt.events = events;
 
-  while(sem_trywait(&glbl_data->sem_shutdown) != 0 && errno == EAGAIN)
+  while(sem_trywait(&glbl->sem_shutdown) != 0 && errno == EAGAIN)
   {
     clock_gettime(CLOCK_MONOTONIC, &iter_start);
 
@@ -155,7 +153,7 @@ void *th_events(void *data)
     }
     if(amt < 0)
     {
-      log_err("failed to read %s: %s", glbl_data->procfile, strerror(errno));
+      log_err("failed to read %s: %s", glbl->procfile, strerror(errno));
       goto err;
     }
     
@@ -166,7 +164,7 @@ void *th_events(void *data)
       goto iter_end;
     }
 
-    ret = limeade_send_await(&glbl_data->lctx, LIMEADE_PACKET_EVENTS, events);
+    ret = limeade_send_await(&glbl->lctx, LIMEADE_PACKET_EVENTS, events);
     if(ret != LIMEADE_OK)
     {
       log_err("limeade_send_await failed: %s", LIMEADE_ERROR_REPRS[ret]);
@@ -190,7 +188,7 @@ iter_end:
     if(real_wait.tv_sec < 0 || real_wait.tv_sec < 0)
     {
       log_warn(
-          "event thread took longer than the allocated time (%llins when the goal was %llins)",
+          "event thread took longer than the allocated time (%lins when the goal was %lins)",
           ((int64_t)diff.tv_sec)      * 999999999 + diff.tv_nsec,
           ((int64_t)goal_wait.tv_sec) * 999999999 + goal_wait.tv_nsec);
       continue;
@@ -204,7 +202,7 @@ err:
   fclose(fd);
   free(events);
   free(buffer);
-  pthread_mutex_unlock(&glbl_data->mtx_events_err);
+  pthread_mutex_unlock(&glbl->mtx_events_err);
   return NULL;
 }
 

@@ -14,27 +14,8 @@
 #include "logging.h"
 #include "thread_pass.h"
 
-void *handle_commandeer(void *data)
+void *th_handle(struct thread_pass * const glbl)
 {
-  struct limeade_commandeer *pkt = data;
-
-  uid_t ruid, euid, suid;
-  getresuid(&ruid, &euid, &suid);
-
-  pid_t pid = fork();
-  if(!pid)
-  {
-    if(pkt->flags & LIMEADE_COMMANDEER_HIGH_PRIV)
-    {
-    }
-  } else
-  {
-    log_info("executed command '%s' per request of the server (id %i)", pkt->command, pkt->id);
-}
-
-void *th_handle(void *data)
-{
-  struct thread_pass * const glbl = data;
   struct limeade_recvd pkt;
   int ret;
 
@@ -59,9 +40,6 @@ void *th_handle(void *data)
     {
       switch(pkt.type)
       {
-        case LIMEADE_PACKET_COMMANDEER:
-          log_warn("Server sent a COMMANDEER packet, which is not currently supported");
-          break;
         case LIMEADE_PACKET_CLOSE:
         {
           log_crit("Server closed connection!");
