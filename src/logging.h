@@ -13,14 +13,14 @@ void set_logging_output(FILE **choice);
 void set_logging_file(const char * const path);
 char *logging_stdout_timestamp(void);
 char *logging_file_timestamp(void);
-void log_dbg(const char *msg, ...);
-void log_dbg2(const char *msg, ...);
-void log_dbg3(const char *msg, ...);
-void log_dbgerr(const char *msg, ...);
-void log_info(const char *msg, ...);
-void log_warn(const char *msg, ...);
-void log_crit(const char *msg, ...);
-void log_err(const char *msg, ...);
+void log_dbg(const char *msg, ...) __attribute__((format(printf, 1, 2)));
+void log_dbg2(const char *msg, ...) __attribute__((format(printf, 1, 2)));
+void log_dbg3(const char *msg, ...) __attribute__((format(printf, 1, 2)));
+void log_dbgerr(const char *msg, ...) __attribute__((format(printf, 1, 2)));
+void log_info(const char *msg, ...) __attribute__((format(printf, 1, 2)));
+void log_warn(const char *msg, ...) __attribute__((format(printf, 1, 2)));
+void log_crit(const char *msg, ...) __attribute__((format(printf, 1, 2)));
+void log_err(const char *msg, ...) __attribute__((format(printf, 1, 2)));
 
 #define LOGGING_INIT(out) set_logging_file(out)
 #define logging_init() logging_set_colors(true)
