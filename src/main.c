@@ -41,7 +41,7 @@ enum limeade_error populate_global_store()
   pthread_mutex_init(&GLBL.mtx_handle_err, NULL);
   sem_init(&GLBL.sem_shutdown, 1, 0);
   sem_init(&GLBL.sem_ready, 1, 0);
-  sem_wait(&GLBL.sem_ready);
+  sem_post(&GLBL.sem_ready);
   return 0;
 }
 
@@ -63,6 +63,13 @@ static pthread_t TH_TIDS[4];
 #define TH_PROC_TID   TH_TIDS[1]
 #define TH_PERF_TID   TH_TIDS[2]
 #define TH_HANDLE_TID TH_TIDS[3]
+const char *thread_names[] = {"events", "proc", "perf", "handler"};
+pthread_mutex_t *mtx_err[] = {
+  &GLBL.mtx_events_err,
+  &GLBL.mtx_proc_err,
+  &GLBL.mtx_perf_err,
+  &GLBL.mtx_handle_err,
+};
 
 int init_threads(void)
 {
@@ -93,23 +100,44 @@ int init_threads(void)
 
 void stop_threads(void)
 {
-  sem_wait(&GLBL.sem_shutdown);
   for(int i = 0; i < sizeof(TH_TIDS) / sizeof(pthread_t); i++)
-    pthread_kill(TH_TIDS[i], SIGUSR1);
+  {
+    sem_post(&GLBL.sem_ready);
+    sem_post(&GLBL.sem_shutdown);
+  }
   for(int i = 0; i < sizeof(TH_TIDS) / sizeof(pthread_t); i++)
     pthread_join(TH_TIDS[i], NULL);
 }
 
 int check_threads(void)
 {
-  // TODO make sure all threads & processes are alive
+  int ret;
+
+  for(int i = 0; i < sizeof(mtx_err) / sizeof(pthread_mutex_t*); i++)
+  {
+    ret = pthread_mutex_trylock(mtx_err[i]);
+    if(!ret)
+    {
+      pthread_mutex_unlock(mtx_err[i]);
+      log_err("%s thread exited unexpectedly", thread_names[i]);
+      return -1;
+    }
+    if(ret != EBUSY)
+    {
+      log_err("failed to check %s thread: %s", thread_names[i], strerror(ret));
+      return -1;
+    }
+  }
+
   return 0;
 }
 
 void wait_for_something_to_happen(void)
 {
-  /* waits for something to happen */
-  // TODO
+  struct timespec wait = {0, 100000000};
+
+  while(check_threads() == 0)
+    nanosleep(&wait, NULL);
 }
 
 unsigned int us_from_ts(struct timespec *ts_start, struct timespec *ts_stop)
@@ -136,15 +164,17 @@ unsigned int us_from_ts(struct timespec *ts_start, struct timespec *ts_stop)
 
 int main(int argc, char **argv)
 {
-  if(confirm_system_configuration() < 0)
-    return 1;
 
-  int ret;
+
+  int ret = 0;
   INIT_CLOCK();
 
   populate_conf(&CONFIG, argc, argv);
   LOGGING_INIT(CONFIG.logfile);
   set_log_level(CONFIG.log_level);
+  
+  if(confirm_system_configuration() < 0)
+    return 1;
 
   log_info("LIMEADE CLIENT v%s", VERSION);
   log_info("Created by %s under the AGPLv3 license", MAINTAINER);
@@ -156,7 +186,6 @@ int main(int argc, char **argv)
   ret = populate_global_store();
   if(ret < 0)
   {
-    log_err("Error from `limeade_init`: %s", LIMEADE_ERROR_REPRS[ret]);
     log_crit("Failed to initialize global store, exiting...");
     return 1;
   }
@@ -184,22 +213,18 @@ int main(int argc, char **argv)
   }
 
   {
-    struct limeade_intro *introduction;
+    struct limeade_intro introduction = generate_introduction();
 
-    if(!(introduction = generate_introduction()))
-    {
-      log_crit("Failed to generate introduction");
-      ret = 1;
-      goto undo_startup;
-    }
-    if((ret = limeade_send_await(&GLBL.lctx, LIMEADE_PACKET_INTRO, *introduction)) != LIMEADE_OK)
+    ret = limeade_send_await(&GLBL.lctx, LIMEADE_PACKET_INTRO, introduction);
+    release_introduction(&introduction);
+
+    if(ret != LIMEADE_OK)
     {
       log_crit("Failed to send introduction: %s", LIMEADE_ERROR_REPRS[ret]);
-      release_introduction(introduction);
+      release_introduction(&introduction);
       ret = 1;
       goto undo_startup;
     }
-    release_introduction(introduction);
   }
   
   STOP_CLOCK();

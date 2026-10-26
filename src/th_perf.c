@@ -28,7 +28,7 @@ static int populate_meminfo(const char * const in, const int in_sz, struct limea
    * 0 on success, -1 on error */
 
   char *total_kb_idx, *free_kb_idx, *available_kb_idx, *cached_kb_idx, *endptr;
-  void *total_ln_end, *free_ln_end, *available_ln_end, *cached_ln_end, *max_idx;
+  char *total_ln_end, *free_ln_end, *available_ln_end, *cached_ln_end, *max_idx;
   char *total_kb_str, *free_kb_str, *available_kb_str, *cached_kb_str;
 
   // while this looks relatively unproductive (and it very well could be),
@@ -45,10 +45,10 @@ static int populate_meminfo(const char * const in, const int in_sz, struct limea
   if(!total_kb_idx || !free_kb_idx || !available_kb_idx || !cached_kb_idx)
     return -1;
 
-  total_ln_end     = memchr(total_kb_idx,     '\n', max_idx - (void*)total_kb_idx);
-  free_ln_end      = memchr(free_kb_idx,      '\n', max_idx - (void*)free_kb_idx);
-  available_ln_end = memchr(available_kb_idx, '\n', max_idx - (void*)available_kb_idx);
-  cached_ln_end    = memchr(cached_kb_idx,    '\n', max_idx - (void*)cached_kb_idx);
+  total_ln_end     = memchr(total_kb_idx,     '\n', max_idx - total_kb_idx);
+  free_ln_end      = memchr(free_kb_idx,      '\n', max_idx - free_kb_idx);
+  available_ln_end = memchr(available_kb_idx, '\n', max_idx - available_kb_idx);
+  cached_ln_end    = memchr(cached_kb_idx,    '\n', max_idx - cached_kb_idx);
 
   if(!total_ln_end || !free_ln_end || !available_ln_end || !cached_ln_end)
     return -1;

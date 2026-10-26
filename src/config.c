@@ -5,8 +5,6 @@
 #include<string.h>
 #include<unistd.h>
 
-#include "logging.h"
-
 enum network_mode
 {
   NETWORK_MODE_NEITHER = 0,
@@ -217,7 +215,7 @@ static inline void populate_unfilled_conf(struct prog_config *c)
 
 static inline void populate_from_argv(struct prog_config *c, int argc, char **argv)
 {
-  log_crit("'populate_from_argv` not implemented");
+  /*** CLI argument parsing is not yet supported ***/
 }
 
 void populate_conf(struct prog_config *config, int argc, char **argv)

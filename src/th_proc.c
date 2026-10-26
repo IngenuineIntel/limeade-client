@@ -471,8 +471,6 @@ static int init_proc_entries(struct proc_entry **out)
       continue;
     }
 
-    iter_skip:
-    
     free(cur);
     cur = prev;
     prev = cur->prev;
@@ -670,7 +668,7 @@ static int generic_from_entries(struct proc_entry *head, struct limeade_proc_gen
 void *th_proc(struct thread_pass * const glbl)
 {
   struct timespec goal_wait, iter_start, iter_end, diff, real_wait;
-  struct proc_entry *head;
+  struct proc_entry *head = NULL;
   struct limeade_proc_generic pkt;
   int ret;
 
@@ -715,8 +713,6 @@ void *th_proc(struct thread_pass * const glbl)
     if(ret != LIMEADE_OK)
       log_crit("failed to send proc_generic packet: %s", LIMEADE_ERROR_REPRS[ret]);
     
-    iter_end:
-
     clock_gettime(CLOCK_MONOTONIC, &iter_end);
 
     diff.tv_sec  = iter_end.tv_sec  - iter_start.tv_sec;
@@ -742,6 +738,7 @@ void *th_proc(struct thread_pass * const glbl)
   }
   
 err:
+  free_proc_entries(head);
   pthread_mutex_unlock(&glbl->mtx_proc_err);
   return NULL;
 }

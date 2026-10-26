@@ -81,8 +81,8 @@ void set_logging_file(const char * const path)
   } else
   {
     if(!(*logging_output = fopen(path, "a")))
-      return set_logging_file(NULL);
-    logging_set_colors(false);
+      set_logging_file(NULL);
+    else logging_set_colors(false);
   }
 }
 

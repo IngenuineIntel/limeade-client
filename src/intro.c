@@ -214,11 +214,11 @@ int get_cpu_info(struct cpu_info *out)
 
     line_len = (line_end - line_start);
 
+    val_start = line_end;
+    int sz = 0;
+
     if(TARGET_MATCH(line_start, line_len, VENDOR_ID_TARGET))
     {
-      val_start = line_end;
-      int sz = 0;
-
       for(; *(char*)val_start != ':'; val_start--, sz++);
 
       val_start += 2; // jump over ": "
@@ -230,9 +230,6 @@ int get_cpu_info(struct cpu_info *out)
 
     } else if(TARGET_MATCH(line_start, line_len, MODEL_NAME_TARGET))
     {
-      val_start = line_end;
-      int sz = 0;
-
       for(; *(char*)val_start != ':'; val_start--, sz++);
 
       val_start += 2;
