@@ -83,7 +83,7 @@ struct statinfo { uint64_t uptime, user, sys; };
 static struct statinfo stat_cache_1, stat_cache_2;
 static struct statinfo *stat_prev = &stat_cache_1, *stat_next = &stat_cache_2;
 
-static char PROC_STAT_BUFFER[72];
+static char PROC_STAT_BUFFER[128];
 static char PROC_MEMINFO_BUFFER[2048];
 
 static inline void next_stat(void)
@@ -170,6 +170,7 @@ static int populate_limeade_perf(struct limeade_perf * const out)
     return -1;
   }
   cpu_usage_from_stat(out);
+  next_stat();
 
   fd = fopen("/proc/meminfo", "r");
   if(!fd)
@@ -194,21 +195,26 @@ void *th_perf(struct thread_pass * const glbl)
 
   signal(SIGUSR1, thread_recv_sig);
   goal_wait.tv_sec  = glbl->perf_ms_p / 1000;
-  goal_wait.tv_nsec = glbl->perf_ms_p % 1000 / 1000000;
+  goal_wait.tv_nsec = glbl->perf_ms_p % 1000 * 1000000;
 
-  populate_stat();
+  if(populate_stat() < 0)
+  {
+    log_crit("Failed to populate initial perf data from /proc/stat");
+    return NULL;
+  }
 
-  pthread_mutex_lock(&glbl->mtx_events_err);
-  log_dbg("th_events ready");
+  pthread_mutex_lock(&glbl->mtx_perf_err);
+  log_dbg("th_perf ready");
   sem_wait(&glbl->sem_ready);
 
   while(sem_trywait(&glbl->sem_shutdown) != 0 && errno == EAGAIN)
   {
     clock_gettime(CLOCK_MONOTONIC, &iter_start);
 
+    next_stat();
     if(populate_limeade_perf(&perf) < 0)
     {
-      log_crit("faield to populate Limeade PERF packet");
+      log_crit("Failed to populate Limeade PERF packet");
       goto err;
     }
 
@@ -217,8 +223,6 @@ void *th_perf(struct thread_pass * const glbl)
       log_crit("Failed to send Limeade PERF packet: %s", LIMEADE_ERROR_REPRS[e]);
       goto err;
     }
-
-iter_end:
 
     clock_gettime(CLOCK_MONOTONIC, &iter_end);
 
@@ -232,7 +236,7 @@ iter_end:
       real_wait.tv_nsec += 999999999;
     }
     
-    if(real_wait.tv_sec < 0 || real_wait.tv_sec < 0)
+    if(real_wait.tv_sec < 0 || real_wait.tv_nsec < 0)
     {
       log_warn(
           "perf thread took longer than the allocated time (%lins when the goal was %lins)",
@@ -248,8 +252,30 @@ err:
   return NULL;
 }
 
+/*
 int main(void)
 {
- return 0;
-}
+  struct timespec wait = {1, 0};
+  struct limeade_perf perf = {0};
 
+  if(populate_stat() < 0)
+  {
+    perror("failed to read /proc/stat");
+    return 1;
+  }
+  next_stat();
+  if(nanosleep(&wait, NULL) < 0 ||
+     populate_limeade_perf(&perf) < 0)
+  {
+    perror("failed to sample performance data");
+    return 1;
+  }
+
+  printf("CPU user: %u%%, system: %u%%\n", perf.perc_cpu_user,
+         perf.perc_cpu_sys);
+  printf("Memory: total=%u kB, free=%u kB, available=%u kB, cached=%u kB\n",
+         perf.mem_total_kb, perf.mem_free_kb, perf.mem_available_kb,
+         perf.mem_cached_kb);
+  return 0;
+}
+*/
