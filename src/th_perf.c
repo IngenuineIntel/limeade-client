@@ -12,6 +12,8 @@
 #define MEM_FREE_TARGET      "MemFree:"
 #define MEM_AVAILABLE_TARGET "MemAvailable:"
 #define MEM_CACHED_TARGET    "Cached:"
+#define ITERATE_BACKWARDS(ptr, target)\
+  for(; *ptr != target; ptr--)
 
 int populate_meminfo(const char * const in, const int in_sz, struct limeade_perf * const out)
 {
@@ -50,45 +52,37 @@ int populate_meminfo(const char * const in, const int in_sz, struct limeade_perf
   available_kb_str = available_ln_end - 4;
   cached_kb_str    = cached_ln_end    - 4;
 
-  // SIMD feels unecessary here
-  while(*total_kb_str != ' ')
-    total_kb_str--;
-
-  while(*free_kb_str != ' ')
-    free_kb_str--;
-
-  while(*available_kb_str != ' ')
-    available_kb_str--;
-
-  while(*cached_kb_str != ' ')
-    cached_kb_str--;
+  ITERATE_BACKWARDS(total_kb_str, ' ');
+  ITERATE_BACKWARDS(free_kb_str, ' ');
+  ITERATE_BACKWARDS(available_kb_str,  ' ');
+  ITERATE_BACKWARDS(cached_kb_str, ' ');
 
   out->mem_total_kb = strtol(++total_kb_str, &endptr, 10);
-  if(endptr == total_kb_str)
-    return -1;
+  if(endptr == total_kb_str) return -1;
 
   out->mem_free_kb = strtol(++free_kb_str, &endptr, 10);
-  if(endptr == free_kb_str)
-    return -1;
+  if(endptr == free_kb_str) return -1;
 
   out->mem_available_kb = strtol(++available_kb_str, &endptr, 10);
-  if(endptr == free_kb_str)
-    return -1;
+  if(endptr == free_kb_str) return -1;
 
   out->mem_cached_kb = strtol(++cached_kb_str, &endptr, 10);
-  if(endptr == cached_kb_str)
-    return -1;
+  if(endptr == cached_kb_str) return -1;
 
   return 0;
 }
 
-// to measure performance, data must be taken from /proc/stat at intervals and
-// be measured against the previous read
-// this is how that data is stored
-struct statinfo
+struct statinfo { uint32_t uptime, user, system; };
+static struct statinfo stat_cache_1, stat_cache_2;
+static struct statinfo *stat_prev = &stat_cache_1, *stat_next = &stat_cache_2;
+
+inline void next_stat(void)
 {
-  // TODO
-};
+  struct statinfo *tmp;
+  tmp = stat_prev;
+  stat_prev = stat_next;
+  stat_next = tmp;
+}
 
 int populate_statinfo(const char * const in, const int in_sz, struct statinfo *const out)
 {
