@@ -1,11 +1,18 @@
 // th_perf.c
+// FIXME my interface makes no sense!!!
 
+#include<errno.h>
+#include<inttypes.h>
 #include<signal.h>
+#include<stdint.h>
+#include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
+#include<unistd.h>
 
 #include<liblimeade/liblimeade.h>
 
+#include "logging.h"
 #include "thread_pass.h"
 
 #define MEM_TOTAL_TARGET     "MemTotal:"
@@ -15,7 +22,7 @@
 #define ITERATE_BACKWARDS(ptr, target)\
   for(; *ptr != target; ptr--)
 
-int populate_meminfo(const char * const in, const int in_sz, struct limeade_perf * const out)
+static int populate_meminfo(const char * const in, const int in_sz, struct limeade_perf * const out)
 {
   /* populates mem_*_kb fields of `out` with data from /proc/meminfo
    * 0 on success, -1 on error */
@@ -64,7 +71,7 @@ int populate_meminfo(const char * const in, const int in_sz, struct limeade_perf
   if(endptr == free_kb_str) return -1;
 
   out->mem_available_kb = strtol(++available_kb_str, &endptr, 10);
-  if(endptr == free_kb_str) return -1;
+  if(endptr == available_kb_str) return -1;
 
   out->mem_cached_kb = strtol(++cached_kb_str, &endptr, 10);
   if(endptr == cached_kb_str) return -1;
@@ -72,11 +79,14 @@ int populate_meminfo(const char * const in, const int in_sz, struct limeade_perf
   return 0;
 }
 
-struct statinfo { uint32_t uptime, user, system; };
+struct statinfo { uint64_t uptime, user, sys; };
 static struct statinfo stat_cache_1, stat_cache_2;
 static struct statinfo *stat_prev = &stat_cache_1, *stat_next = &stat_cache_2;
 
-inline void next_stat(void)
+static char PROC_STAT_BUFFER[72];
+static char PROC_MEMINFO_BUFFER[2048];
+
+static inline void next_stat(void)
 {
   struct statinfo *tmp;
   tmp = stat_prev;
@@ -84,31 +94,162 @@ inline void next_stat(void)
   stat_next = tmp;
 }
 
-int populate_statinfo(const char * const in, const int in_sz, struct statinfo *const out)
+static int populate_statinfo(const char * const in, const int in_sz)
 {
-  // TODO
+  char line[256];
+  uint64_t counters[10] = {0};
+  int line_sz, count;
+
+  if(!in || in_sz <= 0)
+    return -1;
+
+  const char *line_end = memchr(in, '\n', in_sz);
+  line_sz = line_end ? (int)(line_end - in) : in_sz;
+  if(line_sz < 4 || line_sz >= (int)sizeof(line) || memcmp(in, "cpu ", 4))
+    return -1;
+
+  memcpy(line, in, line_sz);
+  line[line_sz] = '\0';
+  count = sscanf(line, "cpu %" SCNu64 " %" SCNu64 " %" SCNu64 " %" SCNu64
+                 " %" SCNu64 " %" SCNu64 " %" SCNu64 " %" SCNu64
+                 " %" SCNu64 " %" SCNu64,
+                 &counters[0], &counters[1], &counters[2], &counters[3],
+                 &counters[4], &counters[5], &counters[6], &counters[7],
+                 &counters[8], &counters[9]);
+  if(count < 4)
+    return -1;
+
+  stat_next->uptime = 0;
+  for(int i = 0; i < count && i < 8; i++)
+    stat_next->uptime += counters[i];
+  stat_next->user = counters[0] + counters[1];
+  stat_next->sys = counters[2] + counters[5] + counters[6];
   return 0;
 }
 
-int8_t cpu_usage_from_stat(struct statinfo *start, struct statinfo *end, uint32_t interval_ms)
+static int populate_stat(void)
 {
-  // TODO
-  return 0;
+  int amt;
+  FILE *fd = fopen("/proc/stat", "r");
+  if(!fd)
+    return -1;
+
+  amt = fread(PROC_STAT_BUFFER, 1, sizeof(PROC_STAT_BUFFER) - 1, fd);
+  fclose(fd);
+  if(amt < 0)
+    return -1;
+
+  return populate_statinfo(PROC_STAT_BUFFER, amt);
+}
+
+static void cpu_usage_from_stat(struct limeade_perf * const out)
+{
+  uint64_t diff_up, diff_user, diff_sys;
+
+  diff_up   = stat_next->uptime - stat_prev->uptime;
+  diff_sys  = stat_next->sys    - stat_prev->sys;
+  diff_user = stat_next->user   - stat_prev->user;
+
+  if(!diff_up)
+  {
+    out->perc_cpu_user = out->perc_cpu_sys = 0;
+    return;
+  }
+
+  out->perc_cpu_user = (uint8_t)((diff_user * 100) / diff_up);
+  out->perc_cpu_sys  = (uint8_t)((diff_sys * 100) / diff_up);
+}
+static int populate_limeade_perf(struct limeade_perf * const out)
+{
+  int amt;
+  FILE *fd;
+
+  if(populate_stat() < 0)
+  {
+    log_crit("failed to populate perf data from /proc/stat");
+    return -1;
+  }
+  cpu_usage_from_stat(out);
+
+  fd = fopen("/proc/meminfo", "r");
+  if(!fd)
+    return -1;
+
+  amt = fread(PROC_MEMINFO_BUFFER, 1, sizeof(PROC_MEMINFO_BUFFER) - 1, fd);
+  fclose(fd);
+
+  if(amt < 0)
+    return -1;
+
+  PROC_MEMINFO_BUFFER[amt] = '\0';
+
+  return populate_meminfo(PROC_MEMINFO_BUFFER, amt, out);
 }
 
 void *th_perf(struct thread_pass * const glbl)
 {
+  struct timespec goal_wait, iter_start, iter_end, diff, real_wait;
+  struct limeade_perf perf = {0};
+  int e;
+
   signal(SIGUSR1, thread_recv_sig);
-  // TODO
+  goal_wait.tv_sec  = glbl->perf_ms_p / 1000;
+  goal_wait.tv_nsec = glbl->perf_ms_p % 1000 / 1000000;
+
+  populate_stat();
+
+  pthread_mutex_lock(&glbl->mtx_events_err);
+  log_dbg("th_events ready");
+  sem_wait(&glbl->sem_ready);
+
+  while(sem_trywait(&glbl->sem_shutdown) != 0 && errno == EAGAIN)
+  {
+    clock_gettime(CLOCK_MONOTONIC, &iter_start);
+
+    if(populate_limeade_perf(&perf) < 0)
+    {
+      log_crit("faield to populate Limeade PERF packet");
+      goto err;
+    }
+
+    if((e = limeade_send_await(&glbl->lctx, LIMEADE_PACKET_PERF, perf)) != LIMEADE_OK)
+    {
+      log_crit("Failed to send Limeade PERF packet: %s", LIMEADE_ERROR_REPRS[e]);
+      goto err;
+    }
+
+iter_end:
+
+    clock_gettime(CLOCK_MONOTONIC, &iter_end);
+
+    diff.tv_sec  = iter_end.tv_sec  - iter_start.tv_sec;
+    diff.tv_nsec = iter_end.tv_nsec - iter_start.tv_nsec;
+    real_wait.tv_sec  = goal_wait.tv_sec  - diff.tv_sec;
+    real_wait.tv_nsec = goal_wait.tv_nsec - diff.tv_nsec;
+    if(real_wait.tv_nsec < 0) // carry
+    {
+      real_wait.tv_sec--;
+      real_wait.tv_nsec += 999999999;
+    }
+    
+    if(real_wait.tv_sec < 0 || real_wait.tv_sec < 0)
+    {
+      log_warn(
+          "perf thread took longer than the allocated time (%lins when the goal was %lins)",
+          ((int64_t)diff.tv_sec)      * 999999999 + diff.tv_nsec,
+          ((int64_t)goal_wait.tv_sec) * 999999999 + goal_wait.tv_nsec);
+      continue;
+    }
+
+    nanosleep(&real_wait, &diff);
+  }
+err:
+  pthread_mutex_unlock(&glbl->mtx_perf_err);
   return NULL;
 }
 
-
-/*
-int main()
+int main(void)
 {
-  // TODO
-  return 0;
+ return 0;
 }
-*/
 
