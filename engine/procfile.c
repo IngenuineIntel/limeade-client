@@ -5,6 +5,8 @@
 
 #include "lce.h"
 
+// TODO make the procfile only openable by users within the 'limeade' group
+
 int lce_proc_open(struct inode *inode, struct file *file)
 {
   return 0;
