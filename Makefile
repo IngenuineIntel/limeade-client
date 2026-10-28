@@ -14,11 +14,11 @@ limeade-client: src/main.c src/logging.c
 install: uninstall all
 	sudo cp ./limeade-client /usr/local/bin/limeade-client
 	-sudo ln -s /usr/local/bin/limeade-client /usr/local/sbin/limeade-client
-	sudo groupadd --system limeade
-	sudo useradd --system limeade -g limeade
-	sudo mkdir /etc/limeade
-	sudo chown root:limeade /etc/limeade
-	sudo chmod 640 /etc/limeade
+	-sudo groupadd --system limeade
+	-sudo useradd --system limeade -g limeade
+	-sudo mkdir /etc/limeade
+	-sudo chown root:limeade /etc/limeade
+	-sudo chmod 640 /etc/limeade
 	sudo cp ./limeade-client.ini /etc/limeade/limeade-client.ini
 
 uninstall:
