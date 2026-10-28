@@ -23,66 +23,62 @@
 // ~$ chmod 660 /etc/limeade
 //
 
+#include<dirent.h>
 #include<errno.h>
 #include<grp.h>
-#include<dirent.h>
+#include<pwd.h>
 #include<unistd.h>
 
 #include"logging.h"
+
+static const char TARGET_USER_NAME[] = "limeade";
+static const char *TARGET_GROUP_NAME = TARGET_USER_NAME;
 
 #define ERR(...)\
 do { log_crit(__VA_ARGS__); return -1; } while(0)
 
 int confirm_system_configuration(void)
 {
-  /* confirms the following:
-   * - the executing user is in the `limeade` user group
-   * - the executing user is NOT root
-   * - there is a directly `/etc/limeade` which is owned by
-   *   `root:limeade` with file perm 660
-   *
-   * If all these are found to be true, 0 is returned. Otherwise, a
-   * large clarifying message is printed describing the necessary
-   * system configuration and how to fix it, along with a -1 return.
-   */
-
-  // 1. root
   if(geteuid() == 0)
-    ERR("This program must not be run as root!");
-
-  // 2. user group
   {
-    struct group *u_grp = getgrnam("limeade");
-    
-    if(!u_grp)
+    struct passwd *pw = getpwnam(TARGET_USER_NAME);
+    if(!pw || setuid(pw->pw_uid) < 0)
+      ERR("Failed to descalate priviledges into user 'limeade'");
+  }
+
+  {
+    register struct group *ugrp = getgrnam(TARGET_GROUP_NAME);
+
+    if(!ugrp)
       ERR("No 'limeade' user group to be a member of");
 
-    // 20 is presumptuous, but 20 user groups is a _lot_
-    gid_t groups[20];
-    if(getgroups(20, groups) < 0)
+    // 30 is preseumptuous, but also a _lot_
+    gid_t groups[30];
+    if(getgroups(30, groups) < 0)
       ERR("Failed to acquire user groups");
 
-    register gid_t target_gid = u_grp->gr_gid;
-    for(register int i = 0; i < 20; i++)
+    register gid_t target_gid = ugrp->gr_gid;
+    for(register int i = 0; i < 30; i++)
       if(groups[i] == target_gid)
         goto found_group;
 
-    ERR("Process isn't a member of the `limeade` user group");
+    ERR("Process isn't a member of the 'limeade' user group");
   }
+
 found_group:
 
-  // 3. access to /etc/limeade
-  // not going to check if it's more readable than it should be, not within the
-  // scope of this program to find mistakes in sysadmin'ing
   {
-    DIR *dfd = opendir("/etc/limeade");
+    register DIR *dfd = opendir("/etc/limeade");
     if(!dfd && errno == EACCES)
-      ERR("%s %s",
-          "Permission denied when accessing '/etc/limeade'.",
-          "Does the directory belong to 'root:limeade' with perm 660?");
+    {
+      log_warn("Permissions denied when accessing '/etc/limeade'");
+      log_warn("Default configurations will be used.");
+    }
   }
+
   return 0;
 }
+
 
 #undef ERR
 
