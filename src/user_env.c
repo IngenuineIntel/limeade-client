@@ -42,7 +42,8 @@ int confirm_system_configuration(void)
   if(geteuid() == 0)
   {
     struct passwd *pw = getpwnam(TARGET_USER_NAME);
-    if(!pw || setuid(pw->pw_uid) < 0)
+    if(!pw || initgroups(TARGET_USER_NAME, pw->pw_gid) < 0 ||
+       setgid(pw->pw_gid) < 0 || setuid(pw->pw_uid) < 0)
       ERR("Failed to descalate priviledges into user 'limeade'");
     log_info("Changed user from root to 'limeade'");
   }
@@ -55,11 +56,13 @@ int confirm_system_configuration(void)
 
     // 30 is preseumptuous, but also a _lot_
     gid_t groups[30];
-    if(getgroups(30, groups) < 0)
+    register int ngroups = getgroups(30, groups);
+    if(ngroups < 0)
       ERR("Failed to acquire user groups");
 
     register gid_t target_gid = ugrp->gr_gid;
-    for(register int i = 0; i < 30; i++)
+
+    for(register int i = 0; i < ngroups; i++)
       if(groups[i] == target_gid)
         goto found_group;
 
