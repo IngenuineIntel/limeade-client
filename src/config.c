@@ -57,7 +57,6 @@ const struct prog_config DEFAULT_CONFIG = {
 
 #define CONFIG_FILE "limeade-client.ini"
 #define GLOBAL_CONF_LOCATION "/etc/limeade/%s"
-#define USER_CONF_LOCATION   "%s/.config/%s"
 
 static inline void init_config(struct prog_config *conf)
 {
@@ -155,7 +154,7 @@ static inline void populate_from_conf(const char * const path, struct prog_confi
       {
         if(match_target_str(val_start, val_len, NETWORK_MODE_REPRS[i]))
         {
-          if(i)
+          if(i) // to avoid N/A
             config->net_mode = i;
           break;
         }
@@ -224,18 +223,11 @@ void populate_conf(struct prog_config *config, int argc, char **argv)
    * default configuration to file system and populates the config as such
    */
   char path_buffer[64];
-  char *home = getenv("HOME");
 
   *config = DEFAULT_CONFIG;
 
   snprintf(path_buffer, sizeof(path_buffer), GLOBAL_CONF_LOCATION, CONFIG_FILE);
   populate_from_conf(path_buffer, config);
-
-  if(home)
-  {
-    snprintf(path_buffer, sizeof(path_buffer), USER_CONF_LOCATION, home, CONFIG_FILE);
-    populate_from_conf(path_buffer, config);
-  }
 
   populate_from_argv(config, argc, argv);
 }

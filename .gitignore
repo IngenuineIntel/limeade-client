@@ -4,3 +4,5 @@
 *.out
 
 engine/build/*
+
+./limeade-client
