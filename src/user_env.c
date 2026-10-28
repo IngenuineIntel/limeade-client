@@ -44,6 +44,7 @@ int confirm_system_configuration(void)
     struct passwd *pw = getpwnam(TARGET_USER_NAME);
     if(!pw || setuid(pw->pw_uid) < 0)
       ERR("Failed to descalate priviledges into user 'limeade'");
+    log_info("Changed user from root to 'limeade'");
   }
 
   {
