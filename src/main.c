@@ -197,6 +197,8 @@ int main(int argc, char **argv)
     return 1;
   }
 
+  log_info("Checking threads");
+
   if(check_threads() < 0)
   {
     log_crit("Thread(s) died after starting, exiting...");
