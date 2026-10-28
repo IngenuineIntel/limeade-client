@@ -121,12 +121,12 @@ static inline void populate_from_conf(const char * const path, struct prog_confi
     if(!line_end)
       break;
 
-    *line_end = '\0';
-
     val_end = line_end;
 
     SKIP_WHITESPACE_UP(line_start, amt_rem);
     SKIP_WHITESPACE_DOWN(val_end);
+
+    *val_end = '\0';
 
     line_len = (line_end - line_start);
 
