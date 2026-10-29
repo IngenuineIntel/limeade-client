@@ -3,12 +3,103 @@
 
 //#include<emmintrin.h>
 
+#include <linux/cred.h>
+#include <linux/kernel.h>
+#include <linux/kernel_read_file.h>
+#include <linux/user_namespace.h>
+
 #include "lce.h"
 
-// TODO make the procfile only openable by users within the 'limeade' group
+#define LCE_GROUP_FILE "/etc/group"
+#define LCE_GROUP_FILE_MAX (1024 * 1024)
+
+static int lce_populate_limeade_gid(kgid_t *target_gid)
+{
+  static const char group_name[] = "limeade";
+  void *buf = NULL;
+  char *data, *line, *line_end, *separator, *gid_start, *gid_end;
+  char gid_text[11];
+  size_t file_size = 0;
+  ssize_t read_size;
+  u32 gid;
+  int ret = -ENOENT;
+
+  read_size = kernel_read_file_from_path(LCE_GROUP_FILE, 0, &buf,
+                                         LCE_GROUP_FILE_MAX, &file_size,
+                                         READING_UNKNOWN);
+  if(read_size < 0)
+  {
+    kvfree(buf);
+    return (int)read_size;
+  }
+
+  data = buf;
+  file_size = min_t(size_t, file_size, read_size);
+  for(line = data; file_size && line < data + file_size;)
+  {
+    line_end = memchr(line, '\n', data + file_size - line);
+    if(!line_end)
+      line_end = data + file_size;
+
+    separator = memchr(line, ':', line_end - line);
+    if(separator && separator - line == sizeof(group_name) - 1 &&
+       !memcmp(line, group_name, sizeof(group_name) - 1))
+    {
+      gid_start = memchr(separator + 1, ':', line_end - separator - 1);
+      if(!gid_start || ++gid_start >= line_end)
+      {
+        ret = -EINVAL;
+        goto done;
+      }
+
+      gid_end = memchr(gid_start, ':', line_end - gid_start);
+      if(!gid_end)
+        gid_end = line_end;
+      if(gid_end == gid_start || gid_end - gid_start >= sizeof(gid_text))
+      {
+        ret = -EINVAL;
+        goto done;
+      }
+      for(char *digit = gid_start; digit < gid_end; digit++)
+        if(*digit < '0' || *digit > '9')
+        {
+          ret = -EINVAL;
+          goto done;
+        }
+      memcpy(gid_text, gid_start, gid_end - gid_start);
+      gid_text[gid_end - gid_start] = '\0';
+      if(kstrtou32(gid_text, 10, &gid))
+      {
+        ret = -EINVAL;
+        goto done;
+      }
+      *target_gid = make_kgid(&init_user_ns, gid);
+      ret = gid_valid(*target_gid) ? 0 : -EINVAL;
+      goto done;
+    }
+
+    line = line_end + (line_end < data + file_size);
+  }
+
+done:
+  kvfree(buf);
+  return ret;
+}
 
 int lce_proc_open(struct inode *inode, struct file *file)
 {
+  kgid_t target_gid;
+
+  if(lce_populate_limeade_gid(&target_gid) < 0)
+    return -EACCES;
+
+#ifdef CONFIG_MULTIUSER
+  if(!in_group_p(target_gid))
+    return -EACCES;
+#else
+  return -EACCES;
+#endif
+
   return 0;
 }
 

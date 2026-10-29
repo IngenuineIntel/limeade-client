@@ -15,7 +15,7 @@
 #define LCE_PROCFILE_PATH "lce"
 
 // proc entry permissions
-#define LCE_PROCFILE_PERM 0400
+#define LCE_PROCFILE_PERM 0444
 
 // number in which kfifo overflows are logged
 // minimum is 1, maximum is UINT32_MAX
