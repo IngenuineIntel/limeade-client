@@ -186,8 +186,7 @@ int main(int argc, char **argv)
 
   log_info("LIMEADE CLIENT v%s", VERSION);
   log_info("Copyright (c) 2026 IngenuineIntel (Roan Rothrock)");
-  log_info("This software is provided under the AGPLv3 license. See");
-  log_info("<https://www.gnu.org/licenses/>.");
+  log_info("This software is provided under the AGPLv3 license. See <https://www.gnu.org/licenses/> for more details.");
   
   START_CLOCK();
 

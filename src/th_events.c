@@ -121,7 +121,7 @@ void *th_events(struct thread_pass * const glbl)
   if(!fd)
   {
     log_err("failed to open %s: %s", glbl->procfile, strerror(errno));
-    log_err("Is the LCE module loaded? (Run 'modprobe lce'");
+    log_err("Is the LCE module loaded? (Run 'modprobe lce'?)");
     sem_post(&glbl->sem_ready);
     return NULL;
   }
@@ -159,7 +159,7 @@ void *th_events(struct thread_pass * const glbl)
       goto iter_end;
     }
 
-    ret = limeade_send_await(&glbl->lctx, LIMEADE_PACKET_EVENTS, events);
+    ret = limeade_send_await(&glbl->lctx, LIMEADE_PACKET_EVENTS, pkt);
     if(ret != LIMEADE_OK)
     {
       log_err("limeade_send_await failed: %s", LIMEADE_ERROR_REPRS[ret]);

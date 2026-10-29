@@ -53,7 +53,7 @@ int get_os_release(char **out)
       val_len = line_end - equals - 1;
       *out = malloc(val_len + 1);
       memcpy(*out, equals, val_len);
-      *out[val_len] = '\0';
+      (*out)[val_len] = '\0';
       return 0;
     }
 
@@ -226,7 +226,7 @@ int get_cpu_info(struct cpu_info *out)
 
       out->vendor_id = malloc(sz + 1);
       memcpy(out->vendor_id, val_start, sz);
-      out->vendor_id[sz + 1] = '\0';
+      out->vendor_id[sz] = '\0';
 
     } else if(TARGET_MATCH(line_start, line_len, MODEL_NAME_TARGET))
     {
@@ -237,7 +237,7 @@ int get_cpu_info(struct cpu_info *out)
 
       out->model_name = malloc(sz + 1);
       memcpy(out->model_name, val_start, sz);
-      out->model_name[sz + 1] = '\0';
+      out->model_name[sz] = '\0';
 
     } else if(TARGET_MATCH(line_start, line_len, NUM_CORES_TARGET))
     {
@@ -272,8 +272,8 @@ int get_hostname(char **out)
   sz = ftell(fd);
 
   *out = malloc(sz + 1);
-  amt  = fread(out, 1, sz, fd);
-  *out[amt] = '\0';
+  amt  = fread(*out, 1, sz, fd);
+  (*out)[amt] = '\0';
 
   fclose(fd);
 
