@@ -65,6 +65,7 @@ int parse_lce_stream(const void *in, uint32_t in_sz,
     type = strtol(buff_idx, &endptr, 10);
     if(endptr == buff_idx || type >= LCE_EVENT_MAX || type <= 0)
       goto skip_iter;
+
     j->syscall = (char*)LCE_EVENT_REPR[type];
 
     INC(buff_idx, line_end)
@@ -78,16 +79,13 @@ int parse_lce_stream(const void *in, uint32_t in_sz,
 
     j->arg2 = (char*)++buff_idx;
 
-
     INC(buff_idx, line_end)
       goto premature_line_end;
     buff_idx++;
 
     j->retval = strtol(buff_idx, &endptr, 10);
     if(endptr == buff_idx || j->retval == INT_MAX)
-    {
       goto skip_iter;
-    }
 
     j->ts_ms  = ts / 1000000;
     j->ts_s   = j->ts_ms / 1000;
@@ -99,17 +97,11 @@ int parse_lce_stream(const void *in, uint32_t in_sz,
     goto iter_end;
 
 premature_line_end:
-    
-skip_iter:
-    nr_parsed--;
-
 iter_end:
     nr_parsed++;
+skip_iter:
     line_end++;
 }
-
-  return nr_parsed;
-
 premature_end:
   return nr_parsed;
 }
@@ -129,6 +121,7 @@ void *th_events(struct thread_pass * const glbl)
   if(!fd)
   {
     log_err("failed to open %s: %s", glbl->procfile, strerror(errno));
+    log_err("Is the LCE module loaded? (Run 'modprobe lce'");
     return NULL;
   }
 

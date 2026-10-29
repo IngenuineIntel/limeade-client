@@ -15,7 +15,6 @@
 #include "intro.c"
 #include "user_env.c"
 
-#include "shutdown.c"
 #include "th_events.c"
 #include "th_handle.c"
 #include "th_perf.c"
@@ -32,8 +31,8 @@ enum limeade_error populate_global_store()
   enum limeade_error ret;
   if((ret = limeade_init(&GLBL.lctx,
                          (CONFIG.net_mode == NETWORK_MODE_UDP
-                         ? LIMEADE_MODE_CLIENT_ETH
-                         : LIMEADE_MODE_CLIENT_SSH),
+                         ? LIMEADE_MODE_CLIENT_ETH|LIMEADE_MODE_MED_COMPRESSION
+                         : LIMEADE_MODE_CLIENT_SSH|LIMEADE_MODE_LOW_COMPRESSION),
                          CONFIG.host)) != LIMEADE_OK) return ret;
   pthread_mutex_init(&GLBL.mtx_events_err, NULL);
   pthread_mutex_init(&GLBL.mtx_proc_err, NULL);
@@ -75,25 +74,24 @@ int init_threads(void)
 {
   if(pthread_create(&TH_EVENTS_TID, NULL, (void*(*)(void*))th_events, &GLBL) != 0)
     return -1;
+
   if(pthread_create(&TH_PROC_TID, NULL, (void*(*)(void*))th_proc, &GLBL) != 0)
-  {
-    pthread_kill(TH_EVENTS_TID, SIGKILL);
-    return -1;
-  }
+    goto err;
+
   if(pthread_create(&TH_PERF_TID, NULL, (void*(*)(void*))th_perf, &GLBL) != 0)
-  {
-    pthread_kill(TH_PROC_TID, SIGKILL);
-    pthread_kill(TH_EVENTS_TID, SIGKILL);
-    return -1;
-  }
+    goto err;
+
   if(pthread_create(&TH_HANDLE_TID, NULL, (void*(*)(void*))th_handle, &GLBL) != 0)
-  {
-    pthread_kill(TH_PERF_TID, SIGKILL);
-    pthread_kill(TH_PROC_TID, SIGKILL);
-    pthread_kill(TH_EVENTS_TID, SIGKILL);
-  }
-  start_shutdown_proc(getpid());
+    goto err;
+
   return 0;
+
+  err:
+
+  sem_post(&GLBL.sem_shutdown);
+  sem_post(&GLBL.sem_ready);
+
+  return -1;
 }
 
 #define start_threads() sem_post(&GLBL.sem_ready)
@@ -101,10 +99,8 @@ int init_threads(void)
 void stop_threads(void)
 {
   for(int i = 0; i < sizeof(TH_TIDS) / sizeof(pthread_t); i++)
-  {
-    sem_post(&GLBL.sem_ready);
     sem_post(&GLBL.sem_shutdown);
-  }
+
   for(int i = 0; i < sizeof(TH_TIDS) / sizeof(pthread_t); i++)
     pthread_join(TH_TIDS[i], NULL);
 }
@@ -177,9 +173,9 @@ int main(int argc, char **argv)
     return 1;
 
   log_info("LIMEADE CLIENT v%s", VERSION);
-  log_info("Created by %s under the AGPLv3 license", MAINTAINER);
-  log_info("");
-  log_dbg("Starting up...");
+  log_info("Copyright (c) 2026 IngenuineIntel (Roan Rothrock)");
+  log_info("This software is provided under the AGPLv3 license. See");
+  log_info("<https://www.gnu.org/licenses/>.");
   
   START_CLOCK();
 
