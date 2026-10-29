@@ -13,8 +13,8 @@ struct thread_pass
 {
   struct limeade_context lctx; // liblimeade object
   sem_t sem_shutdown; // semaphore for shutting down threads
-  sem_t sem_ready;    // semaphore for holding the initialization of the
-                      // threads
+  sem_t sem_ready;    // workers post after initialization
+  sem_t sem_start;     // workers wait on until startup is complete
   int event_ms_p, proc_ms_p, perf_ms_p; // thread iteration frequency (ms(p))
   
   // the main thread will lock all of these before startings the threads, then

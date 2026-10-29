@@ -122,12 +122,14 @@ void *th_events(struct thread_pass * const glbl)
   {
     log_err("failed to open %s: %s", glbl->procfile, strerror(errno));
     log_err("Is the LCE module loaded? (Run 'modprobe lce'");
+    sem_post(&glbl->sem_ready);
     return NULL;
   }
 
   pthread_mutex_lock(&glbl->mtx_events_err);
   log_dbg("th_events ready");
-  sem_wait(&glbl->sem_ready);
+  sem_post(&glbl->sem_ready);
+  while(sem_wait(&glbl->sem_start) != 0 && errno == EINTR);
 
   struct limeade_indiv_event * const events = malloc(128 * sizeof(struct limeade_indiv_event));
   void * const buffer = malloc(65536);

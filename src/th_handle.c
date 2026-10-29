@@ -23,7 +23,8 @@ void *th_handle(struct thread_pass * const glbl)
 
   pthread_mutex_lock(&glbl->mtx_handle_err);
   log_dbg("th_handle ready");
-  sem_wait(&glbl->sem_ready);
+  sem_post(&glbl->sem_ready);
+  while(sem_wait(&glbl->sem_start) != 0 && errno == EINTR);
 
   while(sem_trywait(&glbl->sem_shutdown) != 0 && errno == EAGAIN)
   {

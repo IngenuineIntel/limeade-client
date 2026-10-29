@@ -200,12 +200,14 @@ void *th_perf(struct thread_pass * const glbl)
   if(populate_stat() < 0)
   {
     log_crit("Failed to populate initial perf data from /proc/stat");
+    sem_post(&glbl->sem_ready);
     return NULL;
   }
 
   pthread_mutex_lock(&glbl->mtx_perf_err);
   log_dbg("th_perf ready");
-  sem_wait(&glbl->sem_ready);
+  sem_post(&glbl->sem_ready);
+  while(sem_wait(&glbl->sem_start) != 0 && errno == EINTR);
 
   while(sem_trywait(&glbl->sem_shutdown) != 0 && errno == EAGAIN)
   {

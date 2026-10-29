@@ -681,13 +681,16 @@ void *th_proc(struct thread_pass * const glbl)
   if(ret < 0)
   {
     log_crit("`init_proc_entries` returned an error, quitting proc thread");
-    goto err;
+    free_proc_entries(head);
+    sem_post(&glbl->sem_ready);
+    return NULL;
   }
   else log_dbg("number of processes at first glance: %i", ret);
 
   pthread_mutex_lock(&glbl->mtx_proc_err);
   log_dbg("th_proc ready");
-  sem_wait(&glbl->sem_ready);
+  sem_post(&glbl->sem_ready);
+  while(sem_wait(&glbl->sem_start) != 0 && errno == EINTR);
 
   nanosleep(&goal_wait, &diff);
 

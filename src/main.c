@@ -44,6 +44,7 @@ enum limeade_error populate_global_store()
   pthread_mutex_init(&GLBL.mtx_handle_err, NULL);
   sem_init(&GLBL.sem_shutdown, 0, 0);
   sem_init(&GLBL.sem_ready, 0, 0);
+  sem_init(&GLBL.sem_start, 0, 0);
   return 0;
 }
 
@@ -54,13 +55,13 @@ void depopulate_global_store(void)
   pthread_mutex_destroy(&GLBL.mtx_proc_err);
   pthread_mutex_destroy(&GLBL.mtx_perf_err);
   pthread_mutex_destroy(&GLBL.mtx_handle_err);
-  sem_post(&GLBL.sem_shutdown);
-  sem_post(&GLBL.sem_ready);
   sem_destroy(&GLBL.sem_shutdown);
   sem_destroy(&GLBL.sem_ready);
+  sem_destroy(&GLBL.sem_start);
 }
 
 static pthread_t TH_TIDS[4];
+static int TH_CREATED;
 #define TH_EVENTS_TID TH_TIDS[0]
 #define TH_PROC_TID   TH_TIDS[1]
 #define TH_PERF_TID   TH_TIDS[2]
@@ -77,40 +78,43 @@ int init_threads(void)
 {
   if(pthread_create(&TH_EVENTS_TID, NULL, (void*(*)(void*))th_events, &GLBL) != 0)
     return -1;
+  TH_CREATED++;
 
   if(pthread_create(&TH_PROC_TID, NULL, (void*(*)(void*))th_proc, &GLBL) != 0)
     goto err;
+  TH_CREATED++;
 
   if(pthread_create(&TH_PERF_TID, NULL, (void*(*)(void*))th_perf, &GLBL) != 0)
     goto err;
+  TH_CREATED++;
 
   if(pthread_create(&TH_HANDLE_TID, NULL, (void*(*)(void*))th_handle, &GLBL) != 0)
     goto err;
+  TH_CREATED++;
 
   return 0;
 
   err:
-
-  sem_post(&GLBL.sem_shutdown);
-  sem_post(&GLBL.sem_ready);
-
   return -1;
 }
 
-#define start_threads()\
-  for(int i = 0; i < sizeof(TH_TIDS) / sizeof(pthread_t); i++)\
-    sem_post(&GLBL.sem_ready)
+void start_threads(void)
+{
+  for(int i = 0; i < TH_CREATED; i++)
+    sem_post(&GLBL.sem_start);
+}
 
 void stop_threads(void)
 {
-  for(int i = 0; i < sizeof(TH_TIDS) / sizeof(pthread_t); i++)
+  for(int i = 0; i < TH_CREATED; i++)
     sem_post(&GLBL.sem_shutdown);
 
-  for(int i = 0; i < sizeof(TH_TIDS) / sizeof(pthread_t); i++)
-    sem_post(&GLBL.sem_ready);
+  for(int i = 0; i < TH_CREATED; i++)
+    sem_post(&GLBL.sem_start);
 
-  for(int i = 0; i < sizeof(TH_TIDS) / sizeof(pthread_t); i++)
+  for(int i = 0; i < TH_CREATED; i++)
     pthread_join(TH_TIDS[i], NULL);
+  TH_CREATED = 0;
 }
 
 int check_threads(void)
@@ -197,11 +201,15 @@ int main(int argc, char **argv)
   if(init_threads() < 0)
   {
     log_crit("Failed to initialize threads, exiting...");
+    stop_threads();
     depopulate_global_store();
     return 1;
   }
 
   log_info("Checking threads");
+
+  for(int i = 0; i < TH_CREATED; i++)
+    while(sem_wait(&GLBL.sem_ready) != 0 && errno == EINTR);
 
   if(check_threads() < 0)
   {
