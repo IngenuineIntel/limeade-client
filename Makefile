@@ -20,14 +20,13 @@ install: uninstall all
 	-sudo chown root:limeade /etc/limeade
 	-sudo chmod 640 /etc/limeade
 	sudo cp ./limeade-client.ini /etc/limeade/limeade-client.ini
+	make -C engine install
 
 uninstall:
 	-sudo rm /usr/local/sbin/limeade-client /usr/local/bin/limeade-client
 
 uninstall-environment:
 	@echo "this is not implemented yet!"
-
-
 
 clean:
 	rm -f limeade-client

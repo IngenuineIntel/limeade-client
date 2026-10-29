@@ -102,6 +102,9 @@ void stop_threads(void)
     sem_post(&GLBL.sem_shutdown);
 
   for(int i = 0; i < sizeof(TH_TIDS) / sizeof(pthread_t); i++)
+    sem_post(&GLBL.sem_ready);
+
+  for(int i = 0; i < sizeof(TH_TIDS) / sizeof(pthread_t); i++)
     pthread_join(TH_TIDS[i], NULL);
 }
 
