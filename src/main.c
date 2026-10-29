@@ -29,6 +29,10 @@ static struct prog_config CONFIG;
 enum limeade_error populate_global_store()
 {
   enum limeade_error ret;
+  GLBL.procfile = LCE_PROCFILE;
+  GLBL.event_ms_p = CONFIG.event_send_ms_p;
+  GLBL.proc_ms_p = CONFIG.proc_send_ms_p;
+  GLBL.perf_ms_p = CONFIG.perf_send_ms_p;
   if((ret = limeade_init(&GLBL.lctx,
                          (CONFIG.net_mode == NETWORK_MODE_UDP
                          ? LIMEADE_MODE_CLIENT_ETH|LIMEADE_MODE_MED_COMPRESSION
@@ -38,9 +42,8 @@ enum limeade_error populate_global_store()
   pthread_mutex_init(&GLBL.mtx_proc_err, NULL);
   pthread_mutex_init(&GLBL.mtx_perf_err, NULL);
   pthread_mutex_init(&GLBL.mtx_handle_err, NULL);
-  sem_init(&GLBL.sem_shutdown, 1, 0);
-  sem_init(&GLBL.sem_ready, 1, 0);
-  sem_post(&GLBL.sem_ready);
+  sem_init(&GLBL.sem_shutdown, 0, 0);
+  sem_init(&GLBL.sem_ready, 0, 0);
   return 0;
 }
 
@@ -94,7 +97,9 @@ int init_threads(void)
   return -1;
 }
 
-#define start_threads() sem_post(&GLBL.sem_ready)
+#define start_threads()\
+  for(int i = 0; i < sizeof(TH_TIDS) / sizeof(pthread_t); i++)\
+    sem_post(&GLBL.sem_ready)
 
 void stop_threads(void)
 {
