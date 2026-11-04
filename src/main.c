@@ -25,6 +25,7 @@
 
 static struct thread_pass GLBL;
 static struct prog_config CONFIG;
+static int LCTX_CONNECTED;
 
 enum limeade_error populate_global_store()
 {
@@ -33,11 +34,12 @@ enum limeade_error populate_global_store()
   GLBL.event_ms_p = CONFIG.event_send_ms_p;
   GLBL.proc_ms_p = CONFIG.proc_send_ms_p;
   GLBL.perf_ms_p = CONFIG.perf_send_ms_p;
+  // TODO make the location of the SSH key specifiable by configs, with that value as the default
   if((ret = limeade_init(&GLBL.lctx,
                          (CONFIG.net_mode == NETWORK_MODE_UDP
                          ? LIMEADE_MODE_CLIENT_ETH|LIMEADE_MODE_MED_COMPRESSION
                          : LIMEADE_MODE_CLIENT_SSH|LIMEADE_MODE_LOW_COMPRESSION),
-                         CONFIG.host)) != LIMEADE_OK) return ret;
+                         CONFIG.host, "/etc/limeade/ssh/id_ed25519")) != LIMEADE_OK) return ret;
   pthread_mutex_init(&GLBL.mtx_events_err, NULL);
   pthread_mutex_init(&GLBL.mtx_proc_err, NULL);
   pthread_mutex_init(&GLBL.mtx_perf_err, NULL);
@@ -50,7 +52,8 @@ enum limeade_error populate_global_store()
 
 void depopulate_global_store(void)
 {
-  limeade_release(&GLBL.lctx);
+  if(LCTX_CONNECTED)
+    limeade_release(&GLBL.lctx);
   pthread_mutex_destroy(&GLBL.mtx_events_err);
   pthread_mutex_destroy(&GLBL.mtx_proc_err);
   pthread_mutex_destroy(&GLBL.mtx_perf_err);
@@ -100,7 +103,7 @@ int init_threads(void)
 
 void start_threads(void)
 {
-  for(int i = 0; i < TH_CREATED; i++)
+  for(int i = 0; i < TH_CREATED && i < 3; i++)
     sem_post(&GLBL.sem_start);
 }
 
@@ -109,7 +112,7 @@ void stop_threads(void)
   for(int i = 0; i < TH_CREATED; i++)
     sem_post(&GLBL.sem_shutdown);
 
-  for(int i = 0; i < TH_CREATED; i++)
+  for(int i = 0; i < TH_CREATED && i < 3; i++)
     sem_post(&GLBL.sem_start);
 
   for(int i = 0; i < TH_CREATED; i++)
@@ -172,13 +175,11 @@ unsigned int us_from_ts(struct timespec *ts_start, struct timespec *ts_stop)
 
 int main(int argc, char **argv)
 {
-
-
   int ret = 0;
   INIT_CLOCK();
 
   populate_conf(&CONFIG, argc, argv);
-  LOGGING_INIT(CONFIG.logfile);
+  LOGGING_INIT(NULL);
   set_log_level(CONFIG.log_level);
   
   if(confirm_system_configuration() < 0)
@@ -196,6 +197,14 @@ int main(int argc, char **argv)
     log_crit("Failed to initialize global store, exiting...");
     return 1;
   }
+
+  if((ret = limeade_connect(&GLBL.lctx)) != LIMEADE_OK)
+  {
+    log_crit("Failed to connect to server: %s", LIMEADE_ERROR_REPRS[ret]);
+    depopulate_global_store();
+    return 1;
+  }
+  LCTX_CONNECTED = 1;
 
   if(init_threads() < 0)
   {
@@ -218,27 +227,29 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  if((ret = limeade_connect(&GLBL.lctx)) != LIMEADE_OK)
+  struct limeade_intro introduction = generate_introduction();
+  for(;;)
   {
-    log_crit("Failed to connect to server: %s", LIMEADE_ERROR_REPRS[ret]);
-    ret = 1;
-    goto undo_startup;
-  }
-
-  {
-    struct limeade_intro introduction = generate_introduction();
-
     ret = limeade_send_await(&GLBL.lctx, LIMEADE_PACKET_INTRO, introduction);
-    release_introduction(&introduction);
+    if(ret == LIMEADE_ERROR_REJECTED)
+    {
+      struct timespec retry_wait = {1, 0};
+      nanosleep(&retry_wait, NULL);
+      continue;
+    }
 
     if(ret != LIMEADE_OK)
     {
       log_crit("Failed to send introduction: %s", LIMEADE_ERROR_REPRS[ret]);
-      release_introduction(&introduction);
       ret = 1;
+      release_introduction(&introduction);
       goto undo_startup;
     }
+
+    break;
   }
+  release_introduction(&introduction);
+
   
   STOP_CLOCK();
 

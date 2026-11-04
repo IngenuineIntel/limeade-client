@@ -25,27 +25,6 @@ static char *log_blue, *log_cyan, *log_green, *log_red, *log_yellow, *log_reset 
 // formatted timestamps are put in here to avoid repeated heap allocations
 static char logging_timestamp_buffer[40];
 
-// log levels:
-//
-// level 0: no logging
-// level 1: info   - error
-// level 2: debug  - error
-// level 3: debug2 - error
-// level 4: debug3 - error
-//
-// rules about these logging levels
-//
-// CRITICAL is an error you can't recover from
-// INFO is general knowledge about the program's actions
-// DEBUG is menial status stuff (like a 200 status code)
-// DEBUG2 is really menial stuff like how large outgoing packets are
-// DEBUG3 is like the little printouts you write when you're looking for a segfault
-// ideally, in the event of a segfault, it should be able to be located solely
-// by DEBUG3 logs
-//
-// only functions called by main can call CRITICAL, the functions they call can
-// run INFO & ERROR, but any functions they call can only run DEBUGS
-//
 static int  log_level = 3;
 static bool logging_colors_enabled = false;
 static FILE **logging_output = &stdout;

@@ -68,23 +68,6 @@ static inline void init_config(struct prog_config *conf)
   conf->log_level       = -1;
 }
 
-#define SKIP_WHITESPACE_UP(cur, rem)\
-  for(; *line_start != ' '; cur++, rem--)
-#define SKIP_WHITESPACE_DOWN(end)\
-  for(; *(end - 1) != ' '; end--);\
-  end++
-#define match_target(line, rem, target)\
-  (sizeof(target) > rem\
-  && memcmp(line, target, sizeof(target) - 1) == 0)
-
-inline int match_target_str(const char * const line, int rem, const char * const target)
-{
-  int i = strlen(target);
-  if(i > rem && memcmp(line, target, i) == 0)
-    return 1;
-  return 0;
-}
-
 #define CAST_INT(val_start, target)\
   do{\
   char *endptr;\
@@ -94,101 +77,87 @@ inline int match_target_str(const char * const line, int rem, const char * const
 
 static inline void populate_from_conf(const char * const path, struct prog_config *config)
 {
-  /* populates configuration with a specific config file
-   * returns 0 on success */
-  char data[4096];
-  char *line_start, *equals, *line_end, *val_start, *val_end;
-  int amt_rem, line_len, val_len, have_started_section = 0, have_stopped_section = 0;
+  char data[4097];
+  char *cursor, *data_end;
+  int in_limeade_section = 0;
 
   FILE *fd = fopen(path, "r");
   if(!fd)
     return;
 
-  amt_rem = fread(data, 1, sizeof(data), fd);
+  size_t data_size = fread(data, 1, sizeof(data) - 1, fd);
   fclose(fd);
+  data[data_size] = '\0';
+  cursor = data;
+  data_end = data + data_size;
 
-  if(amt_rem < 0)
-    return;
-
-  data[amt_rem] = '\0';
-
-  line_start = data;
-
-  for(;;)
+  while(cursor < data_end)
   {
-    line_end = memchr(line_start, '\n', amt_rem);
+    char *line_end = memchr(cursor, '\n', data_end - cursor);
+    char *next_line = line_end ? line_end + 1 : data_end;
     if(!line_end)
-      break;
+      line_end = data_end;
 
-    val_end = line_end;
+    char *line = cursor;
+    while(line < line_end && (*line == ' ' || *line == '\t' || *line == '\r'))
+      line++;
+    while(line_end > line
+       && (line_end[-1] == ' ' || line_end[-1] == '\t' || line_end[-1] == '\r'))
+      line_end--;
+    *line_end = '\0';
 
-    SKIP_WHITESPACE_UP(line_start, amt_rem);
-    SKIP_WHITESPACE_DOWN(val_end);
-
-    *val_end = '\0';
-
-    line_len = (line_end - line_start);
-
-    if(match_target(line_start, amt_rem, CONFIG_TARGET_SECTION))
-      have_started_section = 1;
-    else if(*line_start == '[')
-      have_stopped_section = 1;
-
-    if(!have_started_section)
-      goto loop_cont;
-    if(have_stopped_section)
-      break;
-
-    equals = memchr(line_start, '=', val_end - line_start);
-    if(!equals)
-      goto loop_cont;
-
-    val_start = equals + 1;
-    val_len   = (val_end - val_start);
-
-    SKIP_WHITESPACE_UP(val_start, val_len);
-  
-    if(match_target(line_start, amt_rem, CONFIG_TARGET_NET_MODE))
+    if(line < line_end && *line != '#' && *line != ';')
     {
-      for(int i = 0; i < NETWORK_MODE_MAX; i++)
+      if(*line == '[')
       {
-        if(match_target_str(val_start, val_len, NETWORK_MODE_REPRS[i]))
+        in_limeade_section = strcmp(line, CONFIG_TARGET_SECTION) == 0;
+      }
+      else if(in_limeade_section)
+      {
+        char *equals = memchr(line, '=', line_end - line);
+        if(equals)
         {
-          if(i) // to avoid N/A
-            config->net_mode = i;
-          break;
+          char *key_end = equals;
+          char *value_start = equals + 1;
+          while(key_end > line
+             && (key_end[-1] == ' ' || key_end[-1] == '\t'))
+            key_end--;
+          *key_end = '\0';
+           while(value_start < line_end
+             && (*value_start == ' ' || *value_start == '\t'))
+            value_start++;
+
+          if(strcmp(line, CONFIG_TARGET_NET_MODE) == 0)
+          {
+            for(int i = 1; i < NETWORK_MODE_MAX; i++)
+            {
+              if(strcmp(value_start, NETWORK_MODE_REPRS[i]) == 0)
+              {
+                config->net_mode = i;
+                break;
+              }
+            }
+          }
+          else if(strcmp(line, CONFIG_TARGET_HOST) == 0)
+            config->host = strdup(value_start);
+          else if(strcmp(line, CONFIG_TARGET_PORT) == 0)
+            CAST_INT(value_start, config->port);
+          else if(strcmp(line, CONFIG_TARGET_INTERFACE) == 0)
+            config->interface = strdup(value_start);
+          else if(strcmp(line, CONFIG_TARGET_EVENT_SEND_MS_P) == 0)
+            CAST_INT(value_start, config->event_send_ms_p);
+          else if(strcmp(line, CONFIG_TARGET_PROC_SEND_MS_P) == 0)
+            CAST_INT(value_start, config->proc_send_ms_p);
+          else if(strcmp(line, CONFIG_TARGET_PERF_SEND_MS_P) == 0)
+            CAST_INT(value_start, config->perf_send_ms_p);
+          else if(strcmp(line, CONFIG_TARGET_LOG_LEVEL) == 0)
+            CAST_INT(value_start, config->log_level);
+          else if(strcmp(line, CONFIG_TARGET_LOGFILE) == 0)
+            config->logfile = strdup(value_start);
         }
       }
     }
-
-    else if(match_target(line_start, amt_rem, CONFIG_TARGET_HOST))
-      config->host = strdup(val_start);
-
-    else if(match_target(line_start, amt_rem, CONFIG_TARGET_PORT))
-      CAST_INT(val_start, config->port);
-
-    else if(match_target(line_start, amt_rem, CONFIG_TARGET_INTERFACE))
-      config->interface = strdup(val_start);
-
-    else if(match_target(line_start, amt_rem, CONFIG_TARGET_EVENT_SEND_MS_P))
-      CAST_INT(val_start, config->event_send_ms_p);
-
-    else if(match_target(line_start, amt_rem, CONFIG_TARGET_PERF_SEND_MS_P))
-      CAST_INT(val_start, config->perf_send_ms_p);
-
-    else if(match_target(line_start, amt_rem, CONFIG_TARGET_PROC_SEND_MS_P))
-      CAST_INT(val_start, config->proc_send_ms_p);
-
-    else if(match_target(line_start, amt_rem, CONFIG_TARGET_LOG_LEVEL))
-      CAST_INT(val_start, config->log_level); 
-
-    else if(match_target(line_start, amt_rem, CONFIG_TARGET_LOGFILE))
-      config->logfile = strdup(val_start);
-
-    loop_cont:
-
-    line_start = line_end + 1;
-    amt_rem   -= line_len + 1;
+    cursor = next_line;
   }
 }
 

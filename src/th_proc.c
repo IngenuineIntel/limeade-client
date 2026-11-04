@@ -471,12 +471,14 @@ static int init_proc_entries(struct proc_entry **out)
       continue;
     }
 
+    prev->next = NULL;
     free(cur);
     cur = prev;
     prev = cur->prev;
   }
 
   *out = mock_head.next;
+  closedir(dfd);
 
   return ret;
 }
@@ -507,28 +509,29 @@ static int update_proc_entries(struct proc_entry *head)
     if(*endptr != '\0')
       continue;
 
-    FOR_EVERY_PROC_ENTRY_SORTING(head, node)
+    int found = 0;
+    for(struct proc_entry *node = head; node; node = node->sorting_next)
     {
       if(node->data.constant.pid != pid)
         continue;
 
+      found = 1;
       if(populate_proc_data(&node->data, pid) < 0)
-        goto proc_died;
-      else nr_pids++;
-
-      POP_SORTING_PROC_ENTRY(node);
-
-      goto proc_cont;
-
-      proc_died:
-
-      log_dbg3("%p", node);
-      pop_proc_entry(node);
-      free(node);
-
-      goto proc_cont;
+      {
+        log_dbg3("%p", node);
+        POP_SORTING_PROC_ENTRY(node);
+        pop_proc_entry(node);
+        free(node);
+      }
+      else
+      {
+        nr_pids++;
+        POP_SORTING_PROC_ENTRY(node);
+      }
+      break;
     }
-    
+    if(found)
+      goto proc_cont;
     goto new_proc;
 
 proc_cont:
@@ -546,6 +549,7 @@ new_proc:
       free(tail);
     } else nr_pids++;
   }
+  closedir(dfd);
   return nr_pids;
 }
 
@@ -712,7 +716,7 @@ void *th_proc(struct thread_pass * const glbl)
       goto err;
     }
 
-    ret = limeade_send_await(&glbl->lctx, LIMEADE_PACKET_PROC_GENERIC, &pkt);
+    ret = limeade_send_await(&glbl->lctx, LIMEADE_PACKET_PROC_GENERIC, pkt);
     if(ret != LIMEADE_OK)
       log_crit("failed to send proc_generic packet: %s", LIMEADE_ERROR_REPRS[ret]);
     

@@ -78,6 +78,8 @@ found_group:
       log_warn("Permissions denied when accessing '/etc/limeade'");
       log_warn("Default configurations will be used.");
     }
+    if(dfd)
+      closedir(dfd);
   }
 
   return 0;

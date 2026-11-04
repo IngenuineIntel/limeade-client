@@ -16,10 +16,20 @@ install: uninstall all
 	-sudo ln -s /usr/local/bin/limeade-client /usr/local/sbin/limeade-client
 	-sudo groupadd --system limeade
 	-sudo useradd --system limeade -g limeade
-	-sudo mkdir /etc/limeade
-	-sudo chown root:limeade /etc/limeade
-	-sudo chmod 640 /etc/limeade
+	sudo usermod -d /etc/limeade limeade
+	sudo install -d -o root -g limeade -m 0750 /etc/limeade/ssh
+	sudo install -d -o root -g limeade -m 0750 /etc/limeade/.ssh
+	sudo install -d -o root -g limeade -m 2770 /etc/limeade/history
 	sudo cp ./limeade-client.ini /etc/limeade/limeade-client.ini
+	@if ! sudo test -e /etc/limeade/ssh/id_ed25519; then sudo ssh-keygen -q -t ed25519 -N "" -f /etc/limeade/ssh/id_ed25519; fi
+	sudo install -o root -g limeade -m 0640 /etc/limeade/ssh/id_ed25519.pub /etc/limeade/.ssh/authorized_keys
+	sudo chown -R root:limeade /etc/limeade
+	sudo chmod -R u=rwX,g=rX,o= /etc/limeade
+	sudo chown root:limeade /etc/limeade/.ssh/known_hosts
+	sudo chmod 0640 /etc/limeade/.ssh/known_hosts
+	sudo chmod 2750 /etc/limeade/.ssh
+	sudo chmod 2750 /etc/limeade
+	sudo chmod 2770 /etc/limeade/history
 	make -C engine install
 
 uninstall:
