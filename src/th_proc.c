@@ -510,7 +510,7 @@ static int update_proc_entries(struct proc_entry *head)
       continue;
 
     int found = 0;
-    for(struct proc_entry *node = head; node; node = node->sorting_next)
+    FOR_EVERY_PROC_ENTRY(head, node)
     {
       if(node->data.constant.pid != pid)
         continue;
