@@ -227,29 +227,19 @@ int main(int argc, char **argv)
     return 1;
   }
 
+  pthread_mutex_lock(&GLBL.lctx.mtx_pub_attrs);
+  GLBL.lctx.ack_wait_time_ms = 3000;
+  pthread_mutex_unlock(&GLBL.lctx.mtx_pub_attrs);
+
   struct limeade_intro introduction = generate_introduction();
-  for(;;)
-  {
-    ret = limeade_send_await(&GLBL.lctx, LIMEADE_PACKET_INTRO, introduction);
-    if(ret == LIMEADE_ERROR_REJECTED)
-    {
-      struct timespec retry_wait = {1, 0};
-      nanosleep(&retry_wait, NULL);
-      continue;
-    }
-
-    if(ret != LIMEADE_OK)
-    {
-      log_crit("Failed to send introduction: %s", LIMEADE_ERROR_REPRS[ret]);
-      ret = 1;
-      release_introduction(&introduction);
-      goto undo_startup;
-    }
-
-    break;
-  }
+  ret = limeade_send_await(&GLBL.lctx, LIMEADE_PACKET_INTRO, introduction);
   release_introduction(&introduction);
-
+  if(ret != LIMEADE_OK)
+  {
+    log_crit("Failed to send introduction: %s", LIMEADE_ERROR_REPRS[ret]);
+    ret = 1;
+    goto undo_startup;
+  }
   
   STOP_CLOCK();
 
