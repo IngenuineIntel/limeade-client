@@ -11,7 +11,7 @@ all: clean limeade-client
 limeade-client: src/main.c src/logging.c
 	$(CC) -Isrc $(CFLAGS) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
-install: uninstall all
+install: uninstall clean limeade-client
 	sudo cp ./limeade-client /usr/local/bin/limeade-client
 	-sudo ln -s /usr/local/bin/limeade-client /usr/local/sbin/limeade-client
 	-sudo groupadd --system limeade
@@ -30,6 +30,7 @@ install: uninstall all
 	sudo chmod 2750 /etc/limeade/.ssh
 	sudo chmod 2750 /etc/limeade
 	sudo chmod 2770 /etc/limeade/history
+	sudo find /etc/limeade/history -type f -exec chown root:limeade {} + -exec chmod 0660 {} +
 	make -C engine install
 
 uninstall:

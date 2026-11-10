@@ -232,18 +232,21 @@ int main(int argc, char **argv)
   pthread_mutex_unlock(&GLBL.lctx.mtx_pub_attrs);
 
   struct limeade_intro introduction = generate_introduction();
+
+retry_intro:
+
   ret = limeade_send_await(&GLBL.lctx, LIMEADE_PACKET_INTRO, introduction);
-  release_introduction(&introduction);
   if(ret != LIMEADE_OK)
   {
     log_crit("Failed to send introduction: %s", LIMEADE_ERROR_REPRS[ret]);
-    ret = 1;
-    goto undo_startup;
+    goto retry_intro;
   }
   
+  release_introduction(&introduction);
+
   STOP_CLOCK();
 
-  log_dbg("Startup completed in %ius", MEASURE_CLOCK());
+  log_dbg("Startup completed in %ims", MEASURE_CLOCK()/1000);
 
   start_threads();
 
@@ -257,7 +260,6 @@ int main(int argc, char **argv)
 
   ret = 0;
 
-undo_startup:
   stop_threads();
   depopulate_global_store();
   return ret;
