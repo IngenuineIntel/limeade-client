@@ -306,6 +306,11 @@ int lce_hook_kill(struct kprobe *p, struct pt_regs *regs)
 
   regs = (struct pt_regs*)regs->di;
 
+  // if the provided signal is 0, kill is simply being used to check if a
+  // process is alive, and, likewise, probably isn't worth tracking
+  if(!regs->si)
+    return 0;
+
   struct lce_event ev;
 
   snprintf(ev.arg1, sizeof(ev.arg1), "%i", (pid_t)regs->di);

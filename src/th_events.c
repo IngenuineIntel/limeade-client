@@ -140,12 +140,12 @@ void *th_events(struct thread_pass * const glbl)
   {
     clock_gettime(CLOCK_MONOTONIC, &iter_start);
 
-    log_dbg("EVENTS");
+    //log_dbg("EVENTS");
 
     amt = fread(buffer, 1, 65536, fd);
     if(!amt) // no data in procfile
     {
-      log_dbg3("no data in procfile, skipping this iteration");
+      //log_dbg3("no data in procfile, skipping this iteration");
       goto iter_end;
     }
     if(amt < 0)

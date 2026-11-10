@@ -773,7 +773,7 @@ void *th_proc(struct thread_pass * const glbl)
   {
     clock_gettime(CLOCK_MONOTONIC, &iter_start);
 
-    log_dbg("PROC");
+    //log_dbg("PROC");
 
     ret = update_proc_entries(&head);
     if(ret < 0)
@@ -803,7 +803,7 @@ void *th_proc(struct thread_pass * const glbl)
     if(real_wait.tv_nsec < 0) // carry
     {
       real_wait.tv_sec--;
-      real_wait.tv_sec += 999999999;
+      real_wait.tv_nsec += 999999999;
     }
 
     if(real_wait.tv_sec < 0 || real_wait.tv_sec < 0)

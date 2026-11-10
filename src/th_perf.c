@@ -213,7 +213,7 @@ void *th_perf(struct thread_pass * const glbl)
   {
     clock_gettime(CLOCK_MONOTONIC, &iter_start);
 
-    log_dbg("PERF");
+    //log_dbg("PERF");
 
     next_stat();
     if(populate_limeade_perf(&perf) < 0)
