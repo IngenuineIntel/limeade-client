@@ -773,6 +773,8 @@ void *th_proc(struct thread_pass * const glbl)
   {
     clock_gettime(CLOCK_MONOTONIC, &iter_start);
 
+    log_dbg("PROC");
+
     ret = update_proc_entries(&head);
     if(ret < 0)
     {

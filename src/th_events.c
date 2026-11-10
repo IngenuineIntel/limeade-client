@@ -140,6 +140,8 @@ void *th_events(struct thread_pass * const glbl)
   {
     clock_gettime(CLOCK_MONOTONIC, &iter_start);
 
+    log_dbg("EVENTS");
+
     amt = fread(buffer, 1, 65536, fd);
     if(!amt) // no data in procfile
     {
