@@ -111,7 +111,7 @@ if(log_level >= lvl)                     \
 
 void log_dbg(const char *msg, ...)
 {
-  LOG_INNER(2, msg, "[%s%s%s][%sDBG%s]: ", log_blue, LOG_TIME(), log_reset, log_cyan, log_reset);
+  LOG_INNER(2, msg, "[%s%s%s][%sDBUG%s]: ", log_blue, LOG_TIME(), log_reset, log_cyan, log_reset);
 }
 
 void log_dbg2(const char *msg, ...)

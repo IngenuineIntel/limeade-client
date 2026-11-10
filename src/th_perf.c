@@ -161,6 +161,7 @@ static void cpu_usage_from_stat(struct limeade_perf * const out)
 }
 static int populate_limeade_perf(struct limeade_perf * const out)
 {
+  struct timespec rn;
   int amt;
   FILE *fd;
 
@@ -184,7 +185,15 @@ static int populate_limeade_perf(struct limeade_perf * const out)
 
   PROC_MEMINFO_BUFFER[amt] = '\0';
 
-  return populate_meminfo(PROC_MEMINFO_BUFFER, amt, out);
+  if(populate_meminfo(PROC_MEMINFO_BUFFER, amt, out) < 0)
+    return -1;
+
+  clock_gettime(CLOCK_REALTIME, &rn);
+
+  out->ts_s  = rn.tv_sec;
+  out->ts_ms = rn.tv_nsec > 0 ? rn.tv_nsec / 1000000 : 0;
+
+  return 0;
 }
 
 void *th_perf(struct thread_pass * const glbl)
