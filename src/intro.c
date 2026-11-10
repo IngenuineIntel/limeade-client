@@ -9,6 +9,8 @@
 
 #include <liblimeade/liblimeade.h>
 
+#include "logging.h"
+
 int get_os_release(char **out)
 {
   /* Reads Linux Distribution name
@@ -209,16 +211,18 @@ int get_cpu_info(struct cpu_info *out)
       // free does its own NULL checks
       free(out->vendor_id);
       free(out->model_name);
+      out->vendor_id = NULL;
+      out->model_name = NULL;
       return 1;
     }
 
     line_len = (line_end - line_start);
 
-    val_start = line_end;
-    int sz = 0;
-
     if(TARGET_MATCH(line_start, line_len, VENDOR_ID_TARGET))
     {
+      val_start = line_end;
+      int sz = 0;
+
       for(; *(char*)val_start != ':'; val_start--, sz++);
 
       val_start += 2; // jump over ": "
@@ -230,6 +234,9 @@ int get_cpu_info(struct cpu_info *out)
 
     } else if(TARGET_MATCH(line_start, line_len, MODEL_NAME_TARGET))
     {
+      val_start = line_end;
+      int sz = 0;
+
       for(; *(char*)val_start != ':'; val_start--, sz++);
 
       val_start += 2;
@@ -280,31 +287,29 @@ int get_hostname(char **out)
   return 0;
 }
 
-#define get_origin_user(ref) *ref = strdup(getpwuid(getuid())->pw_name)
-#define get_kernel_ver(ref)\
-  do {\
-    struct utsname kdata;\
-    *ref = !uname(&kdata) ? NULL : strdup(kdata.version);\
-  } while(0)
+char *get_kernel_ver(void)
+{
+  struct utsname kdata;
+  if(uname(&kdata)) return NULL;
+  return strdup(kdata.version);
+}
 
 struct limeade_intro generate_introduction(void)
 {
   struct cpu_info cpu;
   struct mem_info mem;
-  char *hostname, *distro, *kernelver, *user;
+  char *hostname, *distro;
 
   get_os_release(&distro);
   get_cpu_info(&cpu);
   get_mem_info(&mem);
   get_hostname(&hostname);
-  get_origin_user(&user);
-  get_kernel_ver(&kernelver);
 
   return (struct limeade_intro){
     .hostname    = hostname,
-    .kernelver   = kernelver,
+    .kernelver   = get_kernel_ver(),
     .distro      = distro,
-    .origin_user = user,
+    .origin_user = strdup(getpwuid(getuid())->pw_name),
     .processor   = cpu.model_name,
     .vendor      = cpu.vendor_id,
     .nr_cores    = cpu.num_cores,
@@ -313,17 +318,17 @@ struct limeade_intro generate_introduction(void)
   };
 }
 
-#define F(attr) free(intro->attr);
+
+
 void release_introduction(struct limeade_intro *intro)
 {
-  F(hostname);
-  F(kernelver);
-  F(distro);
-  F(origin_user);
-  F(processor);
-  F(vendor);
+  free(intro->hostname);
+  free(intro->kernelver);
+  free(intro->distro);
+  free(intro->origin_user);
+  free(intro->processor);
+  free(intro->vendor);
 }
-
 /*
 int main()
 {
@@ -353,7 +358,7 @@ int main()
   free(c.model_name);
   free(c.vendor_id);
 
-  return 0;
+
 }
 */
 

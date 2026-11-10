@@ -2,6 +2,7 @@
 
 #include<errno.h>
 #include<dirent.h>
+#include<stddef.h>
 #include<pthread.h>
 #include<semaphore.h>
 #include<signal.h>
@@ -392,8 +393,11 @@ static int populate_proc_data_command(struct proc_data *data, pid_t pid)
 
   len = fread(data->command, 1, sizeof(data->command) - 1, fd);
   fclose(fd);
-  if(len < 0)
+  if(len == 0)
+  {
+    data->command[0] = '\0';
     return 0;
+  }
   
   // these files separate argument with null bytes, so they must be sanatized
   // I really can't imagine I can use SIMD for this
@@ -401,7 +405,7 @@ static int populate_proc_data_command(struct proc_data *data, pid_t pid)
   for(int i = 0; i < len; i++)
     if(p[i] == '\0')
       p[i] = ' ';
-  p[len - 1] = '\0';
+  p[len] = '\0';
 
   return 0;
 }
@@ -478,12 +482,14 @@ static int init_proc_entries(struct proc_entry **out)
   }
 
   *out = mock_head.next;
+  if(*out)
+    (*out)->prev = NULL;
   closedir(dfd);
 
   return ret;
 }
 
-static int update_proc_entries(struct proc_entry *head)
+static int update_proc_entries(struct proc_entry **head_ptr)
 {
   /* updates data in proc_entry data structure
    * returns the number of processes on success, & -1 on error
@@ -491,36 +497,72 @@ static int update_proc_entries(struct proc_entry *head)
   pid_t pid;
   int nr_pids = 0;
   char *endptr;
+  struct proc_entry *head = *head_ptr;
+  struct proc_entry *unmatched = head;
   struct proc_entry *tail;
+  struct proc_entry *new_entry;
+  struct dirent *entry;
 
   DIR *dfd = opendir("/proc");
   if(!dfd)
     return -1;
 
-  FOR_EVERY_PROC_ENTRY_PREDEF(head, tail)
+  FOR_EVERY_PROC_ENTRY(head, node)
   {
-    tail->sorting_prev = tail->prev;
-    tail->sorting_next = tail->next;
+    node->sorting_prev = node->prev;
+    node->sorting_next = node->next;
   }
 
-  for(struct dirent *entry = readdir(dfd); entry; entry = readdir(dfd))
+  tail = head;
+  while(tail && tail->next)
+    tail = tail->next;
+
+  for(;;)
   {
+    errno = 0;
+    entry = readdir(dfd);
+    if(!entry)
+    {
+      if(errno)
+      {
+        closedir(dfd);
+        return -1;
+      }
+      break;
+    }
+
     pid = strtol(entry->d_name, &endptr, 10);
     if(*endptr != '\0')
       continue;
 
     int found = 0;
-    FOR_EVERY_PROC_ENTRY(head, node)
+    struct proc_entry *node = head;
+    while(node)
     {
+      struct proc_entry *next = node->next;
       if(node->data.constant.pid != pid)
+      {
+        node = next;
         continue;
+      }
 
       found = 1;
+      if(node == unmatched)
+        unmatched = node->sorting_next;
       if(populate_proc_data(&node->data, pid) < 0)
       {
         log_dbg3("%p", node);
         POP_SORTING_PROC_ENTRY(node);
         pop_proc_entry(node);
+        if(node == head)
+        {
+          head = node->next;
+          if(head)
+            head->prev = NULL;
+          *head_ptr = head;
+        }
+        if(node == tail)
+          tail = node->prev;
         free(node);
       }
       else
@@ -538,18 +580,43 @@ proc_cont:
     continue;
 
 new_proc:
-    tail = append_proc_entry(tail);
+    if(tail)
+      tail = append_proc_entry(tail);
+    else
+    {
+      tail = new_proc_entry();
+      head = tail;
+      *head_ptr = head;
+    }
+    new_entry = tail;
+    new_entry->data.constant.pid = pid;
 
-    if(populate_proc_data(&tail->data, pid) < 0)
+    if(populate_proc_data(&new_entry->data, pid) < 0)
     {
       log_dbg3(
           "attempted to add a new proc entry, but failed to populate it: %i",
           pid);
-      pop_proc_entry(tail);
-      free(tail);
+      pop_proc_entry(new_entry);
+      if(new_entry == head)
+      {
+        head = NULL;
+        *head_ptr = NULL;
+      }
+      tail = new_entry->prev;
+      free(new_entry);
     } else nr_pids++;
   }
   closedir(dfd);
+  while(unmatched)
+  {
+    struct proc_entry *next = unmatched->sorting_next;
+    if(unmatched == head)
+      head = unmatched->next;
+    pop_proc_entry(unmatched);
+    free(unmatched);
+    unmatched = next;
+  }
+  *head_ptr = head;
   return nr_pids;
 }
 
@@ -566,13 +633,15 @@ struct proc_tbl_head
   int count;
   int capacity;
   int incr_inc;
+  max_align_t alignment;
 };
 
 static struct limeade_indiv_proc *proc_tbl_init(void)
 {
   /* initializes indiv_proc dynamic array */
   struct proc_tbl_head *ret;
-  ret = malloc(sizeof(*ret) + sizeof(struct limeade_indiv_proc) * PREDICTED_PROC_NR + PREDICTION_LINEAR_BIAS);
+  ret = malloc(sizeof(*ret) + sizeof(struct limeade_indiv_proc)
+                             * (PREDICTED_PROC_NR + PREDICTION_LINEAR_BIAS));
   ret->count    = 0;
   ret->capacity = PREDICTED_PROC_NR + PREDICTION_LINEAR_BIAS;
   ret->incr_inc = PREDICTED_PROC_NR / 2;
@@ -591,7 +660,7 @@ static inline struct limeade_indiv_proc *proc_tbl_append(struct limeade_indiv_pr
     metadata->capacity += metadata->incr_inc;
     *tbl = (typeof(*tbl))(metadata + 1);
   }
-  return *tbl + metadata->count;
+  return *tbl + metadata->count - 1;
 }
 
 /* creates dynamic array */
@@ -630,23 +699,25 @@ static int generic_from_entries(struct proc_entry *head, struct limeade_proc_gen
 
   FOR_EVERY_PROC_ENTRY(head, node)
   {
+    d_starttime = DELTA_FROM_NODE(node, starttime);
+    d_utime     = DELTA_FROM_NODE(node, utime);
+    d_stime     = DELTA_FROM_NODE(node, stime);
+
+    if(d_starttime < 0) // maybe a time change would cause this?
+      continue;
 
     cur = proc_tbl_append(&t);
 
     // implied SIMD
     *((struct constant_proc_data*)cur) = node->data.constant;
+    cur->name = node->data.name;
     cur->command = node->data.command;
-
-    d_starttime = DELTA_FROM_NODE(node, starttime);
-    d_utime     = DELTA_FROM_NODE(node, utime);
-    d_stime     = DELTA_FROM_NODE(node, stime);
 
     if(!d_starttime) // there hasn't been enough time since last iteration
     {
       cur->cpu_user = node->data.prev.utime;
       cur->cpu_sys  = node->data.prev.stime;
-    } else if(d_starttime < 0) // maybe a time change would cause this?
-      continue;
+    }
     else
     {
       cur->cpu_user = d_utime > 0 ? (d_utime * 100) / (d_starttime * 100) : 0;
@@ -665,7 +736,7 @@ static int generic_from_entries(struct proc_entry *head, struct limeade_proc_gen
 
 #undef DELTA_FROM_NODE
 
-#define generic_release(p) proc_tbl_free(p->procs)
+#define generic_release(p) proc_tbl_free((p)->procs)
 
 
 
@@ -702,7 +773,7 @@ void *th_proc(struct thread_pass * const glbl)
   {
     clock_gettime(CLOCK_MONOTONIC, &iter_start);
 
-    ret = update_proc_entries(head);
+    ret = update_proc_entries(&head);
     if(ret < 0)
     {
       log_crit("failed to update proc entries, quitting proc thread");
@@ -717,6 +788,7 @@ void *th_proc(struct thread_pass * const glbl)
     }
 
     ret = limeade_send_await(&glbl->lctx, LIMEADE_PACKET_PROC_GENERIC, pkt);
+    generic_release(&pkt);
     if(ret != LIMEADE_OK)
       log_crit("failed to send proc_generic packet: %s", LIMEADE_ERROR_REPRS[ret]);
     

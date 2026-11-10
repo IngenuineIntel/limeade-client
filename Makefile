@@ -8,8 +8,12 @@ LDLIBS += -llimeade -lpthread
 
 all: clean limeade-client
 
-limeade-client: src/main.c src/logging.c
-	$(CC) -Isrc $(CFLAGS) $(LDFLAGS) $^ $(LDLIBS) -o $@
+CLIENT_SOURCES := src/main.c src/logging.c
+CLIENT_INCLUDES := src/config.c src/intro.c src/user_env.c src/th_events.c \
+	src/th_handle.c src/th_perf.c src/th_proc.c src/thread_pass.h src/logging.h
+
+limeade-client: $(CLIENT_SOURCES) $(CLIENT_INCLUDES)
+	$(CC) -Isrc $(CFLAGS) $(LDFLAGS) $(CLIENT_SOURCES) $(LDLIBS) -o $@
 
 install: uninstall clean limeade-client
 	sudo cp ./limeade-client /usr/local/bin/limeade-client
