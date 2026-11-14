@@ -9,8 +9,6 @@
 
 #include <liblimeade/liblimeade.h>
 
-#include "logging.h"
-
 int get_os_release(char **out)
 {
   /* Reads Linux Distribution name
@@ -173,7 +171,7 @@ static const char MODEL_NAME_TARGET[] = "model name";
 static const char NUM_CORES_TARGET[]  = "cpu cores";
 
 #define TARGET_MATCH(start, len, target)\
-  (sizeof(target) < len && memcmp(start, target, sizeof(target) - 1) == 0)
+  ((len) == sizeof(target) - 1 && memcmp(start, target, sizeof(target) - 1) == 0)
 
 int get_cpu_info(struct cpu_info *out)
 {
@@ -184,8 +182,8 @@ int get_cpu_info(struct cpu_info *out)
   // while this file is quite large, the necessary data should be relatively early
   char data[2048];
 
-  void *line_start, *line_end, *val_start;
-  int amt_rem, line_len;
+  char *line_start, *line_end, *colon, *key_end, *val_start, *val_end;
+  size_t amt, offset, line_len, key_len, val_len;
 
   out->vendor_id  = NULL;
   out->model_name = NULL;
@@ -195,95 +193,96 @@ int get_cpu_info(struct cpu_info *out)
   if(!fd)
     return 1;
 
-  amt_rem = fread(data, 1, sizeof(data), fd);
+  amt = fread(data, 1, sizeof(data) - 1, fd);
   fclose(fd);
 
-  if(amt_rem <= 0)
+  if(amt == 0)
     return 1;
 
-  line_start = data;
+  data[amt] = '\0';
+  offset = 0;
 
-  for(;;)
+  while(offset < amt)
   {
-    line_end = memchr(line_start, '\n', amt_rem);
-    if(!line_end)
+    line_start = data + offset;
+    line_end = memchr(line_start, '\n', amt - offset);
+    line_len = line_end ? (size_t)(line_end - line_start) : amt - offset;
+    offset += line_len + (line_end != NULL);
+    colon = memchr(line_start, ':', line_len);
+
+    if(!colon) continue;
+
+    key_end = colon;
+    while(key_end > line_start && (key_end[-1] == ' ' || key_end[-1] == '\t'))
+      key_end--;
+    key_len = (size_t)(key_end - line_start);
+
+    val_start = colon + 1;
+    val_end = line_start + line_len;
+    while(val_start < val_end && (*val_start == ' ' || *val_start == '\t'))
+      val_start++;
+    while(val_end > val_start && (val_end[-1] == ' ' || val_end[-1] == '\t' || val_end[-1] == '\r'))
+      val_end--;
+    val_len = (size_t)(val_end - val_start);
+
+    if(TARGET_MATCH(line_start, key_len, VENDOR_ID_TARGET))
     {
-      // free does its own NULL checks
       free(out->vendor_id);
+      out->vendor_id = malloc(val_len + 1);
+      if(!out->vendor_id)
+        goto error;
+      memcpy(out->vendor_id, val_start, val_len);
+      out->vendor_id[val_len] = '\0';
+    } else if(TARGET_MATCH(line_start, key_len, MODEL_NAME_TARGET))
+    {
       free(out->model_name);
-      out->vendor_id = NULL;
-      out->model_name = NULL;
-      return 1;
-    }
-
-    line_len = (line_end - line_start);
-
-    if(TARGET_MATCH(line_start, line_len, VENDOR_ID_TARGET))
-    {
-      val_start = line_end;
-      int sz = 0;
-
-      for(; *(char*)val_start != ':'; val_start--, sz++);
-
-      val_start += 2; // jump over ": "
-      sz -= 2;
-
-      out->vendor_id = malloc(sz + 1);
-      memcpy(out->vendor_id, val_start, sz);
-      out->vendor_id[sz] = '\0';
-
-    } else if(TARGET_MATCH(line_start, line_len, MODEL_NAME_TARGET))
-    {
-      val_start = line_end;
-      int sz = 0;
-
-      for(; *(char*)val_start != ':'; val_start--, sz++);
-
-      val_start += 2;
-      sz -= 2;
-
-      out->model_name = malloc(sz + 1);
-      memcpy(out->model_name, val_start, sz);
-      out->model_name[sz] = '\0';
-
-    } else if(TARGET_MATCH(line_start, line_len, NUM_CORES_TARGET))
+      out->model_name = malloc(val_len + 1);
+      if(!out->model_name)
+        goto error;
+      memcpy(out->model_name, val_start, val_len);
+      out->model_name[val_len] = '\0';
+    } else if(TARGET_MATCH(line_start, key_len, NUM_CORES_TARGET))
     {
       char *endptr;
+      long num_cores = strtol(val_start, &endptr, 10);
 
-      for(; *(char*)val_start != ':'; val_start--);
-      val_start += 2;
-
-      out->num_cores = strtol(val_start, &endptr, 10);
-      if(endptr == val_start)
-        out->num_cores = 0;
-
-    } else goto iter_next;
+      while(endptr < val_end && (*endptr == ' ' || *endptr == '\t' || *endptr == '\r'))
+        endptr++;
+      if(endptr != val_start && endptr == val_end && num_cores > 0 && num_cores <= UINT8_MAX)
+        out->num_cores = (uint8_t)num_cores;
+    }
 
     if(out->vendor_id && out->model_name && out->num_cores)
       return 0;
-
-iter_next:
-    line_start = ++line_end;
-    amt_rem -= line_len + 1;
   }
+
+error:
+  free(out->vendor_id);
+  free(out->model_name);
+  out->vendor_id = NULL;
+  out->model_name = NULL;
+  out->num_cores = 0;
+  return 1;
 }
+
+static char DFLT_HOSTNAME[] = "unknown hostname";
 
 int get_hostname(char **out)
 {
+  char data[512];
   FILE *fd = fopen("/etc/hostname", "rb");
-  long sz, amt;
   if(!fd)
-    return 1;
+  {
+    *out = strdup(DFLT_HOSTNAME);
+  } else
+  {
+    int ret = fread(data, 1, sizeof(data), fd);
+    fclose(fd);
+    if(ret < 0)
+      return 1;
 
-  fseek(fd, 0, SEEK_END);
-  sz = ftell(fd);
-
-  *out = malloc(sz + 1);
-  amt  = fread(*out, 1, sz, fd);
-  (*out)[amt] = '\0';
-
-  fclose(fd);
-
+    *out = strdup(data);
+  }
   return 0;
 }
 
@@ -291,7 +290,7 @@ char *get_kernel_ver(void)
 {
   struct utsname kdata;
   if(uname(&kdata)) return NULL;
-  return strdup(kdata.version);
+  return strdup(kdata.release);
 }
 
 struct limeade_intro generate_introduction(void)
