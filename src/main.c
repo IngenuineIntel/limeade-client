@@ -153,8 +153,7 @@ void wait_for_something_to_happen(void)
 
 unsigned int us_from_ts(struct timespec *ts_start, struct timespec *ts_stop)
 {
-
-  uint64_t s, ns;
+  int64_t s, ns;
 
   s  = ts_stop->tv_sec  - ts_start->tv_sec;
   ns = ts_stop->tv_nsec - ts_start->tv_nsec;

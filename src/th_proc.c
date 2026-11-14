@@ -419,25 +419,25 @@ static int populate_proc_data(struct proc_data *data, pid_t pid)
 
   if((ret = populate_proc_data_name(data, pid)) < 0)
   {
-    log_crit("name population failed");
+    log_crit("Name population failed");
     return ret;
   }
 
   if((ret = populate_proc_data_command(data, pid)) < 0)
   {
-    log_crit("command population failed");
+    log_crit("Command population failed");
     return ret;
   }
 
   if((ret = populate_proc_data_status(data, pid)) < 0)
   {
-    log_crit("status population failed");
+    log_crit("Status population failed");
     return ret;
   }
 
   if((ret = populate_proc_data_stat(data, pid)) < 0)
   {
-    log_crit("stat population failed");
+    log_crit("Stat population failed");
     return ret;
   }
 
@@ -551,7 +551,6 @@ static int update_proc_entries(struct proc_entry **head_ptr)
         unmatched = node->sorting_next;
       if(populate_proc_data(&node->data, pid) < 0)
       {
-        log_dbg3("%p", node);
         POP_SORTING_PROC_ENTRY(node);
         pop_proc_entry(node);
         if(node == head)
@@ -794,6 +793,8 @@ void *th_proc(struct thread_pass * const glbl)
     if(ret != LIMEADE_OK)
       log_crit("failed to send proc_generic packet: %s", LIMEADE_ERROR_REPRS[ret]);
     
+    nanosleep(&goal_wait, &diff);
+
     clock_gettime(CLOCK_MONOTONIC, &iter_end);
 
     diff.tv_sec  = iter_end.tv_sec  - iter_start.tv_sec;
