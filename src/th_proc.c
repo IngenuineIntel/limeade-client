@@ -793,8 +793,6 @@ void *th_proc(struct thread_pass * const glbl)
     if(ret != LIMEADE_OK)
       log_crit("failed to send proc_generic packet: %s", LIMEADE_ERROR_REPRS[ret]);
     
-    nanosleep(&goal_wait, &diff);
-
     clock_gettime(CLOCK_MONOTONIC, &iter_end);
 
     diff.tv_sec  = iter_end.tv_sec  - iter_start.tv_sec;
