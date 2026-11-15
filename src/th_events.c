@@ -15,8 +15,6 @@
 #include "thread_pass.h"
 #include "../engine/type_enum.h"
 
-#define MAX(T) (~(1U<<(sizeof(T)*8-1)))
-
 #define INC(idx, end)\
   idx = memchr(idx, '\t', end - idx);\
   if(!idx)
@@ -87,9 +85,8 @@ int parse_lce_stream(const void *in, uint32_t in_sz,
     if(endptr == buff_idx || j->retval == INT_MAX)
       goto skip_iter;
 
-    j->ts_ms  = ts / 1000000;
-    j->ts_s   = j->ts_ms / 1000;
-    j->ts_ms -= j->ts_s;
+    j->ts_s  = ts / 1000000000;
+    j->ts_ms = (ts % 1000000000) / 1000000;
 
     //log_dbg2("ts_s=%i, ts_ms=%i, type=%s", j->ts_s, j->ts_ms, j->syscall);
     //log_dbg2("arg1=%s, arg2=%s, retval=%i", j->arg1, j->arg2, j->retval);
@@ -174,20 +171,25 @@ iter_end:
 
     diff.tv_sec  = iter_end.tv_sec - iter_start.tv_sec;
     diff.tv_nsec = iter_end.tv_nsec - iter_start.tv_nsec;
+    if(diff.tv_nsec < 0)
+    {
+      diff.tv_sec--;
+      diff.tv_nsec += 1000000000;
+    }
     real_wait.tv_sec  = goal_wait.tv_sec  - diff.tv_sec;
     real_wait.tv_nsec = goal_wait.tv_nsec - diff.tv_nsec;
     if(real_wait.tv_nsec < 0) // carry
     {
       real_wait.tv_sec--;
-      real_wait.tv_nsec += 999999999;
+      real_wait.tv_nsec += 1000000000;
     }
 
-    if(real_wait.tv_sec < 0 || real_wait.tv_sec < 0)
+    if(real_wait.tv_sec < 0)
     {
       log_warn(
           "event thread took longer than the allocated time (%lins when the goal was %lins)",
-          ((int64_t)diff.tv_sec)      * 999999999 + diff.tv_nsec,
-          ((int64_t)goal_wait.tv_sec) * 999999999 + goal_wait.tv_nsec);
+          ((int64_t)diff.tv_sec)      * 1000000000 + diff.tv_nsec,
+          ((int64_t)goal_wait.tv_sec) * 1000000000 + goal_wait.tv_nsec);
       continue;
     }
 

@@ -419,25 +419,25 @@ static int populate_proc_data(struct proc_data *data, pid_t pid)
 
   if((ret = populate_proc_data_name(data, pid)) < 0)
   {
-    log_crit("Name population failed");
+    log_warn("Name population failed");
     return ret;
   }
 
   if((ret = populate_proc_data_command(data, pid)) < 0)
   {
-    log_crit("Command population failed");
+    log_warn("Command population failed");
     return ret;
   }
 
   if((ret = populate_proc_data_status(data, pid)) < 0)
   {
-    log_crit("Status population failed");
+    log_warn("Status population failed");
     return ret;
   }
 
   if((ret = populate_proc_data_stat(data, pid)) < 0)
   {
-    log_crit("Stat population failed");
+    log_warn("Stat population failed");
     return ret;
   }
 
