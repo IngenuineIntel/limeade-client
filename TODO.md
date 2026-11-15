@@ -7,6 +7,7 @@
  - [X] Inaccurate startup time measurement
  - [ ] Newlines in proc name entries
  - [X] Inaccurate measurement of process time
+ - [ ] Hangs on SSH failure
 
 ## Features
 
