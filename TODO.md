@@ -8,6 +8,7 @@
  - [ ] Newlines in proc name entries
  - [X] Inaccurate measurement of process time
  - [ ] Hangs on SSH failure
+ - [ ] Redundant `mem_total_kb` data
 
 ## Features
 

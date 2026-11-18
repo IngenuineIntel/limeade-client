@@ -38,7 +38,7 @@ enum limeade_error populate_global_store()
   if((ret = limeade_init(&GLBL.lctx,
                          (CONFIG.net_mode == NETWORK_MODE_UDP
                          ? LIMEADE_MODE_CLIENT_ETH|LIMEADE_MODE_MED_COMPRESSION
-                         : LIMEADE_MODE_CLIENT_SSH|LIMEADE_MODE_LOW_COMPRESSION),
+                         : LIMEADE_MODE_CLIENT_SSH|LIMEADE_MODE_NO_COMPRESSION),
                          CONFIG.host, "/etc/limeade/ssh/id_ed25519")) != LIMEADE_OK) return ret;
   pthread_mutex_init(&GLBL.mtx_events_err, NULL);
   pthread_mutex_init(&GLBL.mtx_proc_err, NULL);
