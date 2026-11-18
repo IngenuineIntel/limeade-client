@@ -25,7 +25,6 @@
 
 static struct thread_pass GLBL;
 static struct prog_config CONFIG;
-static int LCTX_CONNECTED;
 
 enum limeade_error populate_global_store()
 {
@@ -52,8 +51,7 @@ enum limeade_error populate_global_store()
 
 void depopulate_global_store(void)
 {
-  if(LCTX_CONNECTED)
-    limeade_release(&GLBL.lctx);
+  limeade_release(&GLBL.lctx);
   pthread_mutex_destroy(&GLBL.mtx_events_err);
   pthread_mutex_destroy(&GLBL.mtx_proc_err);
   pthread_mutex_destroy(&GLBL.mtx_perf_err);
@@ -200,10 +198,10 @@ int main(int argc, char **argv)
   if((ret = limeade_connect(&GLBL.lctx)) != LIMEADE_OK)
   {
     log_crit("Failed to connect to server: %s", LIMEADE_ERROR_REPRS[ret]);
+    limeade_release(&GLBL.lctx);
     depopulate_global_store();
     return 1;
   }
-  LCTX_CONNECTED = 1;
 
   if(init_threads() < 0)
   {
@@ -232,20 +230,19 @@ int main(int argc, char **argv)
 
   struct limeade_intro introduction = generate_introduction();
 
-retry_intro:
-
   ret = limeade_send_await(&GLBL.lctx, LIMEADE_PACKET_INTRO, introduction);
   if(ret != LIMEADE_OK)
   {
     log_crit("Failed to send introduction: %s", LIMEADE_ERROR_REPRS[ret]);
-    goto retry_intro;
+    depopulate_global_store();
+    return -1;
   }
   
   release_introduction(&introduction);
 
   STOP_CLOCK();
 
-  log_dbg("Startup completed in %ims", MEASURE_CLOCK()/1000);
+  log_info("Startup completed in %ims", MEASURE_CLOCK()/1000);
 
   start_threads();
 

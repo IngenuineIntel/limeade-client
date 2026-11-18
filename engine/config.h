@@ -35,6 +35,8 @@
 // 3: very common, high noise
 // 4: very common, could make the queue unstable in some configurations
 
+//                           NOISE LEVEL
+
 //#define LCE_HOOK_OPEN   // 3
 //#define LCE_HOOK_CLOSE  // 4
 #define LCE_HOOK_UNLINK   // 2
@@ -54,13 +56,13 @@
 #define LCE_HOOK_ACCEPT   // 1
 
 // getuid, geteuid, getresuid
-#define LCE_HOOK_GETUID_FAMILY // 2
+//#define LCE_HOOK_GETUID_FAMILY // 2
 
 // getgid, getegid, getpgid, getresgid
-#define LCE_HOOK_GETGID_FAMILY // 2
+//#define LCE_HOOK_GETGID_FAMILY // 2
 
 // getpid, getppid
-//#define LCE_HOOK_GETPID_FAMILY
+//#define LCE_HOOK_GETPID_FAMILY // 2
 
 // setuid, setfsuid, setresuid
 #define LCE_HOOK_SETUID_FAMILY // 1
@@ -68,11 +70,10 @@
 // setgid, setpgid, setresgid, setfsgid
 #define LCE_HOOK_SETGID_FAMILY // 1
 
+#define LCE_HOOK_PTRACE // 0
+#define LCE_HOOK_CAPGET // 0
+#define LCE_HOOK_CAPSET // 0
 
-#define LCE_HOOK_PTRACE
-#define LCE_HOOK_CAPGET
-#define LCE_HOOK_CAPSET
-
-#define LCE_KEYCTL
+#define LCE_KEYCTL // 0
 
 #endif
